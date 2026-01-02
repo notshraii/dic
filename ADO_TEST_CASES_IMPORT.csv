@@ -1,4 +1,4 @@
-ID,Work Item Type,Title,Test Step,Step Action,Step Expected
+ID,Work Item Type,Title,Step,Action,Expected Result
 ,Test Case,Verify OPV GPA Visual Fields Routing,1,Open DICOM test file or create new DICOM file,DICOM file available for editing
 ,Test Case,Verify OPV GPA Visual Fields Routing,2,Set Modality tag to OPV,Modality equals OPV
 ,Test Case,Verify OPV GPA Visual Fields Routing,3,Set SeriesDescription tag to GPA,SeriesDescription equals GPA
