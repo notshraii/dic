@@ -1,0 +1,258 @@
+ID,Title,Area,Priority,Description,Prerequisites,TestSteps,ExpectedResult,Notes
+TC-001,Verify OPV + GPA Visual Fields Routing,Routing - Ophthalmology,1,"Verify DICOM images with OPV modality and GPA series description are correctly routed by Compass to ophthalmology destination.","Compass server accessible; DICOM sending utility available; Network connectivity; Test DICOM files","1. Open DICOM test file or create new DICOM file
+2. Set Modality tag (0008,0060) to ""OPV""
+3. Set SeriesDescription tag (0008,103E) to ""GPA""
+4. Set PatientID tag (0010,0020) to ""TEST_OPV_GPA_001""
+5. Generate unique StudyInstanceUID (0020,000D)
+6. Save modified DICOM file
+7. Open DICOM sending utility
+8. Configure connection to Compass (host, port, AE Title)
+9. Send DICOM file to Compass via C-STORE
+10. Verify send completes successfully (Status = SUCCESS 0x0000)
+11. Query Compass database or destination system for study
+12. Verify study routed to correct ophthalmology destination","DICOM file successfully transmitted to Compass; Study routed to appropriate ophthalmology destination; Transmission completes within 5 seconds; No errors logged; Study queryable in destination system","Duration: 10 min. Database query: SELECT StudyInstanceUID, Modality, SeriesDescription FROM studies WHERE PatientID = 'TEST_OPV_GPA_001'"
+TC-002,Verify OPV + SFA Visual Fields Routing,Routing - Ophthalmology,1,"Verify DICOM images with OPV modality and SFA series description are correctly routed by Compass.","Same as TC-001","1. Open DICOM test file
+2. Set Modality tag (0008,0060) to ""OPV""
+3. Set SeriesDescription tag (0008,103E) to ""SFA""
+4. Set PatientID to ""TEST_OPV_SFA_001""
+5. Generate unique StudyInstanceUID
+6. Save and send file to Compass
+7. Verify send successful (Status = SUCCESS)
+8. Query destination system for study
+9. Verify correct routing","Same success criteria as TC-001","Duration: 10 min. Related to TC-001 and TC-003"
+TC-003,Verify OPV + Mixed Series Visual Fields Routing,Routing - Ophthalmology,2,"Verify DICOM images with OPV modality and non-standard (mixed/other) series descriptions are correctly handled by Compass.","Same as TC-001","1. Open DICOM test file
+2. Set Modality tag (0008,0060) to ""OPV""
+3. Set SeriesDescription tag (0008,103E) to ""Other""
+4. Set PatientID to ""TEST_OPV_MIXED_001""
+5. Generate unique StudyInstanceUID
+6. Save and send file to Compass
+7. Verify send successful
+8. Query destination for study
+9. Verify edge case handling","Same success criteria as TC-001","Duration: 10 min. Tests edge case handling for non-standard series descriptions"
+TC-004,Verify OPT OCT Routing,Routing - Ophthalmology,1,"Verify DICOM images with OPT modality (Optical Coherence Tomography) are correctly routed by Compass.","Same as TC-001","1. Open DICOM test file
+2. Set Modality tag (0008,0060) to ""OPT""
+3. Set PatientID to ""TEST_OPT_OCT_001""
+4. Set StudyDescription to ""OCT Imaging""
+5. Generate unique StudyInstanceUID
+6. Save and send file to Compass
+7. Verify send successful
+8. Query destination system
+9. Verify OCT routing rules applied","Same success criteria as TC-001","Duration: 10 min. OCT is common ophthalmology modality"
+TC-005,Verify OT IOL Master Routing,Routing - Ophthalmology,1,"Verify DICOM images with OT modality (IOL Master measurements) are correctly routed by Compass.","Same as TC-001","1. Open DICOM test file
+2. Set Modality tag (0008,0060) to ""OT""
+3. Set PatientID to ""TEST_OT_IOLMASTER_001""
+4. Set StudyDescription to ""IOL Master Measurements""
+5. Generate unique StudyInstanceUID
+6. Save and send file to Compass
+7. Verify send successful
+8. Query destination system
+9. Verify IOL Master routing","Same success criteria as TC-001","Duration: 10 min. IOL Master is pre-operative assessment tool"
+TC-006,Verify DOC Combined Reports Routing,Routing - Ophthalmology,2,"Verify DICOM documents with DOC modality (combined OCT and Visual Field reports) are correctly routed by Compass.","Same as TC-001","1. Open DICOM test file
+2. Set Modality tag (0008,0060) to ""DOC""
+3. Set PatientID to ""TEST_DOC_COMBINED_001""
+4. Generate unique StudyInstanceUID
+5. Save and send file to Compass
+6. Verify send successful
+7. Query destination system
+8. Verify document routing","Same success criteria as TC-001","Duration: 10 min. Combined reports consolidate multiple imaging types"
+TC-007,Verify Calling AE Title Routing,Routing Configuration,1,"Verify Compass routes DICOM studies to different destinations based on the Calling AE Title of the sender.","Multiple Calling AE Titles configured in Compass; Routing table with AE Title-based rules; Access to query routing destinations","1. Review Compass routing rules for AE Titles
+2. Open DICOM test file
+3. Configure DICOM sending tool with AE Title ""AET_TEST_A""
+4. Set PatientID to ""TEST_AET_001""
+5. Send DICOM file to Compass
+6. Query destination DESTINATION_A for study
+7. Configure sending tool with AE Title ""AET_TEST_B""
+8. Set PatientID to ""TEST_AET_002""
+9. Send DICOM file to Compass
+10. Query destination DESTINATION_B for study
+11. Verify routing logs show correct destinations","All files successfully transmitted; Studies routed to correct destinations based on Calling AE Title; No routing errors; Routing rules correctly applied","Duration: 30 min. Database query: SELECT StudyInstanceUID, CallingAET, DestinationAET FROM routing_log WHERE PatientID LIKE 'TEST_AET%'"
+TC-008,Verify Delayed Sends with 2-Minute Pause,Study Assembly,2,"Verify Compass correctly handles DICOM studies sent with significant delays (2 minutes) between files.","Timer or stopwatch; Test duration ~6 minutes; Multi-file study (3 files)","1. Prepare 3 DICOM files with same StudyInstanceUID
+2. Assign unique SOPInstanceUID to each file
+3. Note start time
+4. Send first file to Compass (file accepted)
+5. Wait exactly 2 minutes (use timer)
+6. Send second file to Compass (file accepted)
+7. Wait exactly 2 minutes
+8. Send third file to Compass (file accepted)
+9. Note end time (~6 minutes after start)
+10. Query Compass for study
+11. Verify all 3 files associated with same study
+12. Check study completeness status","All 3 files transmitted; Compass associates all files with same study; Study remains open during pauses; No timeout errors; All files queryable as single study","Duration: 6 min. CRITICAL: Use accurate timer. Query: SELECT StudyInstanceUID, SOPInstanceUID, ReceiveTime FROM instances WHERE StudyInstanceUID = 'STUDY_DELAY_TEST_001' ORDER BY ReceiveTime"
+TC-009,Verify Populate Blank Study Date,Data Validation,1,"Verify Compass automatically populates the StudyDate field when it is blank/empty.","Same as TC-001","1. Open DICOM test file
+2. Remove or clear StudyDate tag (0008,0020)
+3. Set PatientID to ""TEST_BLANK_DATE_001""
+4. Record current date in YYYYMMDD format
+5. Generate unique StudyInstanceUID
+6. Save and send file to Compass
+7. Wait for processing (10-30 seconds)
+8. Query Compass database for study
+9. Verify StudyDate field is populated
+10. Compare StudyDate to current date
+11. Verify StudyDate = current date","File with blank StudyDate accepted; Compass populates StudyDate with current date; StudyDate in YYYYMMDD format; Study queryable and routable; No errors","Duration: 10 min. Query: SELECT StudyInstanceUID, StudyDate, PatientID FROM studies WHERE PatientID = 'TEST_BLANK_DATE_001'"
+TC-010,Verify IIMS Accession Number Generation,Data Validation - IIMS,1,"Verify when DICOM study sent with blank AccessionNumber, Compass calls IIMS web service to generate AccessionNumber.","IIMS web service accessible; IIMS API configured; Network to IIMS; Access to IIMS API logs; IIMS credentials configured","1. Open DICOM test file
+2. Remove or clear AccessionNumber tag (0008,0050)
+3. Set PatientID to ""TEST_IIMS_ACCESSION_001""
+4. Generate unique StudyInstanceUID and record it
+5. Save and send file to Compass
+6. Wait for processing and IIMS call (30-60 seconds)
+7. Access IIMS API server
+8. Check IIMS API logs for accession number request
+9. Note generated AccessionNumber from logs
+10. Query Compass database for study
+11. Verify AccessionNumber matches IIMS-generated value
+12. Verify AccessionNumber format is valid","File accepted; Compass calls IIMS web service; IIMS generates and returns AccessionNumber; Compass populates AccessionNumber; Format matches IIMS pattern; Study queryable with new AccessionNumber","Duration: 15 min. MANUAL: Check IIMS logs with grep ""GetAccessionNumber"" /var/log/iims/api.log. Query Compass: SELECT StudyInstanceUID, AccessionNumber FROM studies WHERE PatientID = 'TEST_IIMS_ACCESSION_001'"
+TC-011,Verify Device Accession Number Preserved,Data Validation,1,"Verify when DICOM study sent with valid AccessionNumber, Compass preserves it and does NOT call IIMS.","Same as TC-001","1. Open DICOM test file
+2. Set AccessionNumber (0008,0050) to ""DEVICE_ACC_12345""
+3. Set PatientID to ""TEST_DEVICE_ACCESSION_001""
+4. Generate unique StudyInstanceUID
+5. Record AccessionNumber and StudyInstanceUID
+6. Save and send file to Compass
+7. Wait for processing (10-30 seconds)
+8. Query Compass database for study
+9. Verify AccessionNumber is ""DEVICE_ACC_12345"" (unchanged)
+10. Verify no IIMS API call in logs (optional)
+11. Verify study is routable","File accepted; Compass preserves original AccessionNumber; IIMS API NOT called; Study queryable with original AccessionNumber; Study routes correctly","Duration: 10 min. Opposite of TC-010. Query: SELECT AccessionNumber FROM studies WHERE PatientID = 'TEST_DEVICE_ACCESSION_001'"
+TC-012,Verify Send to MIDIA Destination,Routing - Archival,1,"Verify DICOM studies are successfully routed to MIDIA (Mayo Integrated Digital Image Archive) destination.","MIDIA destination configured; Network to MIDIA; Access to query MIDIA; MIDIA routing rule documentation","1. Review Compass routing rules (MIDIA destination configured)
+2. Identify routing criteria for MIDIA
+3. Create DICOM file meeting routing criteria
+4. Set PatientID to ""TEST_MIDIA_ROUTING_001""
+5. Send file to Compass
+6. Verify send successful
+7. Wait for routing to complete (1-5 minutes)
+8. Access MIDIA query interface
+9. Search for study by PatientID or StudyInstanceUID
+10. Verify all series and instances present in MIDIA
+11. Check Compass routing logs","Study accepted; Compass routes to MIDIA per rules; Study arrives in MIDIA; All instances forwarded correctly; No routing errors","Duration: 15 min. Compass query: SELECT DestinationAET, Status FROM routing_log WHERE PatientID = 'TEST_MIDIA_ROUTING_001'. Verify in MIDIA system."
+TC-013,Verify Send to InfinityView Destination,Routing - Viewing,1,"Verify DICOM studies are successfully routed to InfinityView destination.","InfinityView destination configured; Network to InfinityView; Access to InfinityView application; InfinityView login credentials","1. Review Compass routing rules (InfinityView configured)
+2. Identify routing criteria for InfinityView
+3. Create DICOM file meeting criteria
+4. Set PatientID to ""TEST_INFINITYVIEW_ROUTING_001""
+5. Send file to Compass
+6. Verify send successful
+7. Wait for routing to complete (1-5 minutes)
+8. Log into InfinityView application
+9. Search for study by PatientID
+10. Open study in viewer
+11. Verify images are viewable
+12. Check Compass routing logs","Study accepted; Compass routes to InfinityView per rules; Study arrives in InfinityView; Study viewable in application; All images display correctly; No routing errors","Duration: 15 min. InfinityView Application: Login > Patient Search > Search for TEST_INFINITYVIEW_ROUTING_001"
+TC-014,Verify Duplicate Study Sends,Error Handling,2,"Verify Compass correctly handles when the same DICOM study (same StudyInstanceUID) is sent multiple times.","Same as TC-001","1. Open DICOM test file
+2. Set PatientID to ""TEST_DUPLICATE_STUDY_001""
+3. Generate StudyInstanceUID (record for reuse)
+4. Save file
+5. Send file to Compass (first send - accepted)
+6. Record send time
+7. Immediately send same file again (second send - accepted)
+8. Record send time
+9. Immediately send same file again (third send - accepted)
+10. Record send time
+11. Query Compass database for study
+12. Check number of instances for study
+13. Review Compass logs for duplicate handling","All 3 sends accepted; No errors or rejections; Compass handles duplicate per policy (Replace/Ignore/Version); Study remains queryable and routable","Duration: 10 min. Query: SELECT StudyInstanceUID, SOPInstanceUID, ReceiveTime, COUNT(*) FROM instances WHERE StudyInstanceUID = '...' GROUP BY StudyInstanceUID, SOPInstanceUID ORDER BY ReceiveTime"
+TC-015,Verify MCIE Slow Send,Study Assembly - MCIE,2,"Verify Compass handles MCIE workflow where files are sent slowly, one at a time with 30-second delays.","Timer for 30-second intervals; Test duration ~2.5 minutes; MCIE workflow configured","1. Prepare 5 DICOM files with same StudyInstanceUID
+2. Assign unique SOPInstanceUID to each file
+3. Note start time
+4. Send file 1 to Compass (accepted)
+5. Wait 30 seconds (use timer)
+6. Send file 2 to Compass (accepted)
+7. Wait 30 seconds
+8. Send file 3 to Compass (accepted)
+9. Wait 30 seconds
+10. Send file 4 to Compass (accepted)
+11. Wait 30 seconds
+12. Send file 5 to Compass (accepted)
+13. Note end time (~2.5 minutes total)
+14. Query Compass for study
+15. Verify all 5 files present and linked
+16. Check study completeness","All 5 files transmitted; Compass associates all files; Study remains open during slow receipt; No timeout errors; Complete study routable; MCIE workflow processes correctly","Duration: 2.5 min. TIMING CRITICAL. Query: SELECT StudyInstanceUID, COUNT(*) as FileCount, MIN(ReceiveTime), MAX(ReceiveTime) FROM instances WHERE StudyInstanceUID = 'MCIE_SLOW_SEND_001' GROUP BY StudyInstanceUID"
+TC-016,Verify Anonymization Workflow,Data Privacy - Anonymization,1,"Verify complete workflow of anonymizing a DICOM file (removing PHI) and successfully sending to Compass.","Non-anonymized test files; DICOM anonymization tool; Anonymization rules documented; PHI removal policy","1. Open non-anonymized DICOM file
+2. Record original PHI values (for verification)
+3. Open DICOM anonymization tool
+4. Load file into anonymization tool
+5. Apply anonymization rules (PHI removed/replaced)
+6. Generate new StudyInstanceUID, SeriesInstanceUID, SOPInstanceUID
+7. Save anonymized file
+8. Open anonymized file for verification
+9. Verify PatientName is anonymized (PHI removed)
+10. Verify PatientID is anonymized
+11. Verify UIDs are new (not original)
+12. Send anonymized file to Compass
+13. Verify send successful
+14. Query Compass for study
+15. Verify no PHI in Compass database","Anonymization removes all PHI; New UIDs generated; Anonymized file is valid DICOM; Compass accepts file; Transmission successful; No PHI exposed in system; No errors","Duration: 20 min. PHI Checklist: PatientName(0010,0010), PatientID(0010,0020), PatientBirthDate(0010,0030), PatientAddress(0010,1040), All UIDs replaced"
+TC-017,Verify Save Files to Network Share,File Archival,2,"Verify Compass correctly saves incoming DICOM files to configured network share location.","Network share configured; Write permissions for Compass; Network connectivity to file server; Disk space on share; Network share path documented","1. Review Compass configuration (network share path documented)
+2. Navigate to network share from workstation
+3. Test write access to network share (create/delete test file)
+4. Prepare DICOM study (3-5 files)
+5. Set PatientID to ""TEST_NETWORK_SHARE_001""
+6. Generate unique StudyInstanceUID
+7. Send all files to Compass (all accepted)
+8. Wait for file save to complete (1-2 minutes)
+9. Navigate to network share
+10. Locate study folder (by date or UID)
+11. Count files in folder (match number sent)
+12. Open one DICOM file (verify valid DICOM)
+13. Check file timestamps (match send time)
+14. Verify file permissions (appropriate access)","Files accepted; Files saved to network share; File structure matches organization pattern; All files present; Files are valid DICOM; File permissions allow access; No errors in logs","Duration: 20 min. MANUAL: Navigate to \\\\server\\share\\dicom\\ and locate study folder. Verify file count and integrity."
+TC-018,Verify Send Echo to Prosolv,Routing - Cardiology,2,"Verify echocardiography (echo) DICOM studies are correctly routed to Prosolv cardiology system.","Prosolv routing rule configured; Prosolv destination accessible; Network to Prosolv; Access to Prosolv application; Prosolv login credentials","1. Review Compass routing rules for echo (rule documented)
+2. Open DICOM test file or create new
+3. Set Modality to ""US""
+4. Set SeriesDescription to ""Echocardiogram""
+5. Set StudyDescription to ""Transthoracic Echo""
+6. Set PatientID to ""TEST_ECHO_PROSOLV_001""
+7. Generate unique StudyInstanceUID
+8. Send file to Compass (accepted)
+9. Verify send successful
+10. Check Compass routing logs (queued for Prosolv)
+11. Wait for routing to complete (1-5 minutes)
+12. Log into Prosolv application
+13. Search for study by PatientID
+14. Open study in Prosolv viewer
+15. Verify images viewable","Study accepted; Routing rule identifies as echo; Compass forwards to Prosolv; Study arrives in Prosolv; Study viewable in Prosolv; No routing errors","Duration: 15 min. Compass query: SELECT DestinationAET FROM routing_log WHERE PatientID = 'TEST_ECHO_PROSOLV_001'. Prosolv: Login > Search > TEST_ECHO_PROSOLV_001"
+TC-019,Verify IIMS Department Assignment,Data Validation - IIMS,2,"Verify Compass queries IIMS to determine and assign appropriate department for studies based on patient/study information.","IIMS web service accessible; IIMS API auth configured; Test patient in IIMS database; Department routing rules configured; Network to IIMS; Access to IIMS logs","1. Access IIMS system
+2. Verify test patient exists (MRN12345)
+3. Document patient's expected department
+4. Open DICOM test file
+5. Set PatientID to test patient MRN
+6. Set StudyDescription to ""Chest X-Ray""
+7. Generate unique StudyInstanceUID
+8. Send file to Compass
+9. Wait for processing and IIMS query (30-60 sec)
+10. Access IIMS API logs
+11. Search logs for department query (query logged)
+12. Note department returned by IIMS
+13. Query Compass database for study
+14. Verify Department field populated
+15. Compare to expected department (departments match)
+16. Check routing destination (routed per department rules)","Compass queries IIMS API; IIMS returns correct department; Compass populates Department field; Study routes per department rules; All API calls logged; No API errors or timeouts","Duration: 20 min. MANUAL: Access IIMS logs. Query Compass: SELECT StudyInstanceUID, PatientID, Department, DestinationAET FROM studies WHERE PatientID = 'MRN12345'"
+TC-020,Verify MCIE Webhook Trigger,Integration - MCIE,2,"Verify Compass triggers webhook to MCIE pipeline after successfully receiving and processing a DICOM study.","MCIE webhook endpoint accessible; Webhook auth configured; Network to MCIE API; Ability to monitor webhook endpoint; MCIE webhook enabled; Access to webhook logs","1. Review Compass webhook configuration (URL and auth verified)
+2. Access webhook monitoring system (monitor ready)
+3. Clear webhook logs/history (clean state)
+4. Open DICOM test file
+5. Set PatientID to ""TEST_MCIE_WEBHOOK_001""
+6. Generate unique StudyInstanceUID and record it
+7. Send file to Compass
+8. Wait for processing (30-60 seconds)
+9. Check webhook monitoring system
+10. Verify webhook POST request received (request logged)
+11. Review webhook payload
+12. Verify StudyInstanceUID in payload (UID matches)
+13. Verify PatientID in payload (ID matches)
+14. Verify status field = ""complete"" (status correct)
+15. Check Compass webhook logs (send logged)
+16. Verify HTTP response was 200 OK","Study processed; Webhook POST sent to MCIE endpoint; Payload contains accurate study info; MCIE responds 200 OK; MCIE pipeline triggered; All interactions logged; No auth or connectivity errors","Duration: 15 min. MANUAL: Monitor webhook.site or MCIE logs. Compass query: SELECT StudyInstanceUID, WebhookURL, Status, ResponseCode FROM webhook_log WHERE PatientID = 'TEST_MCIE_WEBHOOK_001'"
+TC-021,Verify Interrupted Send Recovery,Error Handling - Resilience,3,"Verify Compass handles interrupted DICOM transmission gracefully (network failure, connection drop) and recovers without data corruption.","Multi-file study (10 files); Ability to control network; Method to interrupt transmission; Access to Compass database; Backup of test files","1. Prepare 10 DICOM files with same StudyInstanceUID
+2. Begin sending study to Compass (first file accepted)
+3. Monitor send progress (files 1-3 sent)
+4. INTERRUPT transmission (unplug network or kill process)
+5. Note interruption point (after 3 files documented)
+6. Check Compass logs for error (interruption logged)
+7. Wait 1 minute
+8. Query Compass database (partial study found - 3 files)
+9. Verify Compass still accepting connections via C-ECHO (C-ECHO successful)
+10. Restore network connection
+11. Wait for any cleanup timeout if applicable
+12. Resend complete study - all 10 files (all files accepted)
+13. Query Compass database (complete study found - 10 files)
+14. Verify no duplicate or orphan files (clean state)
+15. Check study completeness status (study complete)","Compass detects interruption; Compass does not crash; Partial data handled appropriately; Compass accepts new connections; Complete study can be resent; Final state: complete study with no corruption; No orphaned files","Duration: 10 min. RISK: Medium - intentional interruption. Query during: SELECT COUNT(*) FROM instances WHERE StudyInstanceUID = 'INTERRUPTED_SEND_001'. Query after: Should show 10 files."
+
