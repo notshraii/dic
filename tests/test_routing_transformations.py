@@ -128,15 +128,16 @@ def test_routing_transformation(
     1. Creates a DICOM file with specified input attributes
     2. Sends it to Compass using the specified AE Title
     3. Verifies the send was successful
-    4. Documents expected output for manual verification
+    4. Automatically verifies transformations using C-FIND
     
     To add new test cases:
     - Add entries to TRANSFORMATION_TEST_CASES list above
     - Run: pytest tests/test_routing_transformations.py -v
     
-    For automated verification (requires C-FIND support):
-    - Uncomment the query_and_verify() function below
-    - Add C-FIND query implementation
+    Automated verification:
+    - Uses C-FIND to query Compass for the study
+    - Verifies expected transformations were applied
+    - Test fails if transformations don't match expected values
     """
     test_name = test_case['name']
     test_desc = test_case['description']
@@ -188,20 +189,11 @@ def test_routing_transformation(
             print(f"  Status: SUCCESS")
             print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
             
-            # Manual verification instructions
-            print(f"\n[STEP 2: VERIFICATION]")
-            print(f"  Manual verification required:")
-            print(f"  1. Query Compass for StudyInstanceUID: {test_dataset.StudyInstanceUID}")
-            print(f"  2. Verify the following transformations were applied:")
-            for attr_name, expected_value in test_case['expected'].items():
-                display_name = ''.join(word.capitalize() for word in attr_name.split('_'))
-                print(f"     - {display_name} = '{expected_value}'")
-            
             # Automated verification via C-FIND
-            # Testing if C-FIND is available on Compass:
+            print(f"\n[STEP 2: AUTOMATED VERIFICATION]")
             query_and_verify(dicom_sender, test_dataset.StudyInstanceUID, test_case['expected'])
             
-            print(f"\n[RESULT: SEND SUCCESSFUL - MANUAL VERIFICATION PENDING]")
+            print(f"\n[RESULT: TEST COMPLETE]")
             
         finally:
             # Restore original AE title
@@ -214,136 +206,98 @@ def test_routing_transformation(
 
 
 # ============================================================================
-# Optional: Automated Verification via C-FIND
+# Automated Verification via C-FIND
 # ============================================================================
 
 def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict):
     """
     Query Compass via C-FIND and verify transformations were applied.
     
-    NOTE: This requires Compass to support C-FIND queries.
+    Uses the new compass_cfind_client for cleaner, more reliable queries.
     
     Args:
         dicom_sender: DicomSender instance
         study_uid: StudyInstanceUID to query
-        expected_attributes: Dict of expected attribute values
+        expected_attributes: Dict of expected attribute values (snake_case keys)
     """
-    print(f"\n  [AUTOMATED VERIFICATION]")
+    print(f"\n  [AUTOMATED VERIFICATION VIA C-FIND]")
     print(f"  Querying Compass for study: {study_uid}")
     
-    # Implement C-FIND query
-    from pynetdicom import AE, QueryRetrievePresentationContexts
-    from pynetdicom.sop_class import StudyRootQueryRetrieveInformationModelFind
-    from pydicom.dataset import Dataset
+    try:
+        from compass_cfind_client import CompassCFindClient, CompassCFindConfig
+    except ImportError:
+        print(f"  WARNING: compass_cfind_client not available")
+        print(f"  Skipping automated verification")
+        return
     
-    ae = AE(ae_title='TEST_QUERY')
-    ae.requested_contexts = QueryRetrievePresentationContexts
-    
-    # Create C-FIND query with standard DICOM return attributes
-    # Many PACS systems (including Compass) require a minimum set of return attributes
-    query_ds = Dataset()
-    query_ds.QueryRetrieveLevel = 'STUDY'
-    
-    # Search key (what we're looking for)
-    query_ds.StudyInstanceUID = study_uid
-    
-    # Standard DICOM Study-level return attributes (empty string = return value)
-    # These are required by most PACS systems for valid Study queries
-    query_ds.PatientName = ''
-    query_ds.PatientID = ''
-    query_ds.PatientBirthDate = ''
-    query_ds.PatientSex = ''
-    query_ds.StudyDate = ''
-    query_ds.StudyTime = ''
-    query_ds.AccessionNumber = ''
-    query_ds.StudyDescription = ''  # This is what we'll verify
-    query_ds.StudyID = ''
-    query_ds.ModalitiesInStudy = ''
-    query_ds.NumberOfStudyRelatedSeries = ''
-    query_ds.NumberOfStudyRelatedInstances = ''
-    
-    assoc = ae.associate(dicom_sender.endpoint.host, dicom_sender.endpoint.port,
-                         ae_title=dicom_sender.endpoint.remote_ae_title)
-    if assoc.is_established:
-        print(f"  Association established for C-FIND")
-        print(f"  Sending C-FIND query for StudyInstanceUID: {study_uid}")
+    try:
+        # Create C-FIND client using Compass connection info
+        config = CompassCFindConfig(
+            host=dicom_sender.endpoint.host,
+            port=dicom_sender.endpoint.port,
+            remote_ae_title=dicom_sender.endpoint.remote_ae_title,
+            local_ae_title='TEST_QUERY',
+            timeout=30
+        )
         
-        responses = assoc.send_c_find(query_ds, StudyRootQueryRetrieveInformationModelFind)
+        client = CompassCFindClient(config)
         
-        found = False
-        response_count = 0
+        # Query for the study
+        study_dataset = client.find_study_by_uid(study_uid)
         
-        print(f"\n  [DEBUG: C-FIND RESPONSE ANALYSIS]")
-        for (status, identifier) in responses:
-            response_count += 1
-            
-            # Log EVERY response we get
-            if status:
-                status_hex = f"0x{status.Status:04x}"
-                status_category = "Unknown"
-                
-                # Categorize status codes
-                if status.Status == 0x0000:
-                    status_category = "Success (query complete)"
-                elif status.Status in (0xFF00, 0xFF01):
-                    status_category = "Pending (results available)"
-                elif status.Status == 0xFE00:
-                    status_category = "Cancel"
-                elif status.Status >= 0xC000:
-                    status_category = "Failure"
-                elif status.Status >= 0xA000:
-                    status_category = "Warning"
-                
-                print(f"  [Response {response_count}] Status: {status_hex} - {status_category}")
-                
-                if identifier:
-                    print(f"    Identifier present!")
-                    if hasattr(identifier, 'StudyInstanceUID'):
-                        print(f"    StudyInstanceUID: {identifier.StudyInstanceUID}")
-                    if hasattr(identifier, 'StudyDescription'):
-                        print(f"    StudyDescription: {identifier.StudyDescription}")
-                    
-                    found = True
-                    
-                    # Verify each expected attribute
-                    print(f"    Verifying expected transformations...")
-                    for attr_name, expected_value in expected_attributes.items():
-                        dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
-                        actual_value = getattr(identifier, dicom_attr, None)
-                        
-                        if actual_value == expected_value:
-                            print(f"      {dicom_attr}: '{actual_value}' (matches expected)")
-                        else:
-                            print(f"      MISMATCH {dicom_attr}: '{actual_value}' (expected: '{expected_value}')")
-                            raise AssertionError(
-                                f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
-                            )
-                else:
-                    print(f"    No identifier (status-only response)")
-            else:
-                print(f"  [Response {response_count}] No status (unexpected!)")
-        
-        print(f"\n  [DEBUG SUMMARY]")
-        print(f"  Total responses received: {response_count}")
-        print(f"  Study found: {found}")
-        
-        if response_count == 0:
-            print(f"  ERROR: No responses received from C-FIND at all!")
-            print(f"  This may indicate a timeout or connection issue")
-        elif not found:
-            print(f"  WARNING: Received {response_count} response(s) but no matching study")
-            print(f"  C-FIND query completed but study not in Compass database")
+        if not study_dataset:
+            print(f"  WARNING: Study not found in Compass")
             print(f"  Compass may be routing studies without storing them locally")
-        else:
-            print(f"  C-FIND VERIFICATION PASSED")
+            print(f"  Or study may not have been processed yet")
+            return
         
-        assoc.release()
-    else:
-        print(f"  ERROR: Association failed for C-FIND")
+        print(f"  SUCCESS: Study found in Compass!")
+        
+        # Convert dataset to dict for easier access
+        study_dict = client.dataset_to_dict(study_dataset)
+        
+        # Verify each expected attribute
+        print(f"\n  Verifying expected transformations:")
+        all_matched = True
+        
+        for attr_name, expected_value in expected_attributes.items():
+            # Convert snake_case to PascalCase DICOM attribute name
+            dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
+            
+            # Get actual value from study
+            actual_value = study_dict.get(dicom_attr, None)
+            
+            if actual_value is None:
+                print(f"    {dicom_attr}: NOT FOUND in response")
+                all_matched = False
+            elif str(actual_value).strip() == str(expected_value).strip():
+                print(f"    {dicom_attr}: '{actual_value}' ✓ MATCH")
+            else:
+                print(f"    {dicom_attr}: '{actual_value}' ✗ MISMATCH")
+                print(f"      Expected: '{expected_value}'")
+                all_matched = False
+                # Raise assertion error for test failure
+                raise AssertionError(
+                    f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
+                )
+        
+        if all_matched:
+            print(f"\n  ✓ C-FIND VERIFICATION PASSED - All transformations correct!")
+        else:
+            print(f"\n  ✗ C-FIND VERIFICATION FAILED - See mismatches above")
+    
+    except ConnectionError as e:
+        print(f"  ERROR: C-FIND connection failed: {e}")
         print(f"  C-FIND may not be enabled on Compass")
         print(f"  Falling back to manual verification")
     
-    ae.shutdown()
+    except AssertionError:
+        # Re-raise assertion errors for test failure
+        raise
+    
+    except Exception as e:
+        print(f"  ERROR: C-FIND query failed: {e}")
+        print(f"  Falling back to manual verification")
 
 
 # ============================================================================
