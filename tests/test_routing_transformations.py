@@ -209,7 +209,8 @@ def test_routing_transformation(
 # Automated Verification via C-FIND
 # ============================================================================
 
-def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict, 
+def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
+                     calling_aet: str = None,
                      timeout_seconds: int = 10, poll_interval: float = 1.0):
     """
     Query Compass via C-FIND and verify transformations were applied.
@@ -221,6 +222,7 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         dicom_sender: DicomSender instance
         study_uid: StudyInstanceUID to query
         expected_attributes: Dict of expected attribute values (snake_case keys)
+        calling_aet: AE Title to use for C-FIND query (default: uses sender's current AE)
         timeout_seconds: Maximum seconds to wait for study to appear (default: 10)
         poll_interval: Seconds between polls (default: 1.0)
     """
@@ -241,12 +243,18 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         )
     
     try:
+        # Use same AE Title as sending if not specified
+        # This is important: Compass might filter C-FIND results by Calling AE Title
+        query_ae = calling_aet or dicom_sender.endpoint.local_ae_title
+        
+        print(f"  Calling AE for query: {query_ae}")
+        
         # Create C-FIND client using Compass connection info
         config = CompassCFindConfig(
             host=dicom_sender.endpoint.host,
             port=dicom_sender.endpoint.port,
             remote_ae_title=dicom_sender.endpoint.remote_ae_title,
-            local_ae_title='TEST_QUERY',
+            local_ae_title=query_ae,  # Use same AE as sending!
             timeout=30
         )
         
