@@ -10,3 +10,6 @@ pylibjpeg>=2.0.0
 pylibjpeg-libjpeg>=2.0.0
 pylibjpeg-openjpeg>=2.0.0
 pillow>=10.0.0
+# Database and API clients
+pyodbc>=4.0.39
+requests>=2.31.0
