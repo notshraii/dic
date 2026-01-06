@@ -23,7 +23,17 @@ Usage:
 import argparse
 import sys
 import logging
+from pathlib import Path
 from typing import Optional
+
+from dotenv import load_dotenv
+
+# Load .env file from project root
+project_root = Path(__file__).resolve().parent
+dotenv_path = project_root / ".env"
+
+if dotenv_path.exists():
+    load_dotenv(dotenv_path)
 
 # Setup logging
 logging.basicConfig(

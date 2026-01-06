@@ -12,17 +12,26 @@ Author: DICOM Automation Team
 """
 
 import os
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import logging
 from datetime import datetime
 
+from dotenv import load_dotenv
 from pynetdicom import AE, evt, debug_logger
 from pynetdicom.sop_class import (
     StudyRootQueryRetrieveInformationModelFind,
     PatientRootQueryRetrieveInformationModelFind,
 )
 from pydicom.dataset import Dataset
+
+# Load .env file from project root
+project_root = Path(__file__).resolve().parent
+dotenv_path = project_root / ".env"
+
+if dotenv_path.exists():
+    load_dotenv(dotenv_path)
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
