@@ -66,7 +66,7 @@ class CompassDatabaseClient:
         self.connection = None
         
     def connect(self):
-        """Establish database connection."""
+        """Establish database connection with auto-detection of ODBC drivers."""
         try:
             import pyodbc
         except ImportError:
@@ -75,10 +75,14 @@ class CompassDatabaseClient:
                 "Install it with: pip install pyodbc"
             )
         
+        # Auto-detect ODBC driver if needed
+        driver = self._detect_odbc_driver(pyodbc)
+        logger.info(f"Using ODBC driver: {driver}")
+        
         # Build connection string
         if self.config.use_windows_auth:
             conn_str = (
-                f"DRIVER={{{self.config.driver}}};"
+                f"DRIVER={{{driver}}};"
                 f"SERVER={self.config.server},{self.config.port};"
                 f"DATABASE={self.config.database};"
                 f"Trusted_Connection=yes;"
@@ -87,7 +91,7 @@ class CompassDatabaseClient:
             if not self.config.username or not self.config.password:
                 raise ValueError("Username and password required for SQL authentication")
             conn_str = (
-                f"DRIVER={{{self.config.driver}}};"
+                f"DRIVER={{{driver}}};"
                 f"SERVER={self.config.server},{self.config.port};"
                 f"DATABASE={self.config.database};"
                 f"UID={self.config.username};"
@@ -97,6 +101,50 @@ class CompassDatabaseClient:
         logger.info(f"Connecting to database {self.config.database} on {self.config.server}...")
         self.connection = pyodbc.connect(conn_str, timeout=10)
         logger.info("Database connection established")
+    
+    def _detect_odbc_driver(self, pyodbc):
+        """
+        Auto-detect available SQL Server ODBC driver.
+        
+        Returns:
+            str: Name of the ODBC driver to use
+            
+        Raises:
+            RuntimeError: If no SQL Server driver is found
+        """
+        # Get all available drivers
+        available_drivers = pyodbc.drivers()
+        
+        # Check if configured driver exists
+        if self.config.driver in available_drivers:
+            return self.config.driver
+        
+        # Priority list of SQL Server drivers (newest to oldest)
+        preferred_drivers = [
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+            "ODBC Driver 13 for SQL Server",
+            "ODBC Driver 11 for SQL Server",
+            "SQL Server Native Client 11.0",
+            "SQL Server Native Client 10.0",
+            "SQL Server",
+        ]
+        
+        # Find first available driver from preferred list
+        for driver in preferred_drivers:
+            if driver in available_drivers:
+                logger.info(f"Auto-detected ODBC driver: {driver}")
+                return driver
+        
+        # No SQL Server driver found
+        raise RuntimeError(
+            f"No SQL Server ODBC driver found on this system.\n"
+            f"Available drivers: {', '.join(available_drivers) if available_drivers else 'None'}\n\n"
+            f"Please install an ODBC driver:\n"
+            f"  macOS:   brew install msodbcsql18\n"
+            f"  Windows: Download from https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server\n"
+            f"  Linux:   Follow instructions at https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server"
+        )
         
     def disconnect(self):
         """Close database connection."""

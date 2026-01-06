@@ -40,12 +40,40 @@ def test_connection():
     print("COMPASS DATABASE CONNECTION TEST")
     print("=" * 80)
     
+    # First, check available ODBC drivers
+    print("\n[ODBC DRIVERS CHECK]")
+    print("-" * 80)
+    try:
+        import pyodbc
+        available_drivers = pyodbc.drivers()
+        if available_drivers:
+            print(f"Found {len(available_drivers)} ODBC driver(s):\n")
+            for i, driver in enumerate(available_drivers, 1):
+                # Highlight SQL Server drivers
+                if "SQL Server" in driver or "ODBC Driver" in driver:
+                    print(f"  {i:2d}. {driver} ← SQL Server driver")
+                else:
+                    print(f"  {i:2d}. {driver}")
+        else:
+            print("WARNING: No ODBC drivers found!")
+            print("\nTo install SQL Server ODBC driver:")
+            print("  macOS:   brew install msodbcsql18")
+            print("  Windows: Download from https://learn.microsoft.com/en-us/sql/connect/odbc/download-odbc-driver-for-sql-server")
+            print("  Linux:   See https://learn.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server")
+            return False
+    except ImportError:
+        print("ERROR: pyodbc is not installed")
+        print("\nInstall with: pip install pyodbc")
+        return False
+    
     # Load config
     config = CompassDatabaseConfig.from_env()
-    print(f"\nConfiguration:")
+    print(f"\n\n[CONFIGURATION]")
+    print("-" * 80)
     print(f"  Server: {config.server}")
     print(f"  Database: {config.database}")
     print(f"  Port: {config.port}")
+    print(f"  Configured Driver: {config.driver}")
     print(f"  Windows Auth: {config.use_windows_auth}")
     if not config.use_windows_auth:
         print(f"  Username: {config.username}")
