@@ -213,89 +213,76 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                      calling_aet: str = None,
                      timeout_seconds: int = 30, poll_interval: float = 2.0):
     """
-    Query Compass via C-FIND and verify transformations were applied.
+    Query Compass database and verify transformations were applied.
     
-    Uses the new compass_cfind_client for cleaner, more reliable queries.
-    Polls Compass for up to timeout_seconds waiting for study to appear.
+    Uses database queries instead of C-FIND (since C-FIND returns 0x0110 failure).
+    Polls Compass database for up to timeout_seconds waiting for study to appear.
     
     Args:
         dicom_sender: DicomSender instance
         study_uid: StudyInstanceUID to query
         expected_attributes: Dict of expected attribute values (snake_case keys)
-        calling_aet: AE Title to use for C-FIND query (default: uses sender's current AE)
+        calling_aet: Not used for database queries (kept for compatibility)
         timeout_seconds: Maximum seconds to wait for study to appear (default: 30)
         poll_interval: Seconds between polls (default: 2.0)
     """
     import time
     
-    print(f"\n  [AUTOMATED VERIFICATION VIA C-FIND]")
-    print(f"  Querying Compass for study: {study_uid}")
+    print(f"\n  [AUTOMATED VERIFICATION VIA DATABASE QUERY]")
+    print(f"  Querying Compass database for study: {study_uid}")
     print(f"  Timeout: {timeout_seconds}s")
     
     try:
-        from compass_cfind_client import CompassCFindClient, CompassCFindConfig
+        from compass_db_query import CompassDatabaseClient, CompassDatabaseConfig
     except ImportError:
-        print(f"  ERROR: compass_cfind_client not available")
+        print(f"  ERROR: compass_db_query not available")
         print(f"  Cannot perform automated verification")
         raise AssertionError(
-            "compass_cfind_client module not available. "
+            "compass_db_query module not available. "
             "Automated verification cannot run."
         )
     
     try:
-        # Use same AE Title as sending if not specified
-        # This is important: Compass might filter C-FIND results by Calling AE Title
-        query_ae = calling_aet or dicom_sender.endpoint.local_ae_title
+        # Load database config from environment
+        config = CompassDatabaseConfig.from_env()
         
-        print(f"  Calling AE for query: {query_ae}")
-        
-        # Create C-FIND client using Compass connection info
-        config = CompassCFindConfig(
-            host=dicom_sender.endpoint.host,
-            port=dicom_sender.endpoint.port,
-            remote_ae_title=dicom_sender.endpoint.remote_ae_title,
-            local_ae_title=query_ae,  # Use same AE as sending!
-            timeout=30
-        )
-        
-        client = CompassCFindClient(config)
+        print(f"  Database: {config.database} on {config.server}")
         
         # Poll for the study with timeout
         start_time = time.time()
-        study_dataset = None
+        study_data = None
         attempts = 0
         
         while time.time() - start_time < timeout_seconds:
             attempts += 1
-            study_dataset = client.find_study_by_uid(study_uid)
             
-            if study_dataset:
+            with CompassDatabaseClient(config) as client:
+                study_data = client.get_job_by_study_uid(study_uid)
+            
+            if study_data:
                 elapsed = time.time() - start_time
                 print(f"  SUCCESS: Study found in Compass after {elapsed:.1f}s ({attempts} attempts)")
                 break
             
             if attempts == 1:
-                print(f"  Waiting for study to appear in Compass...")
+                print(f"  Waiting for study to appear in Compass database...")
             
             time.sleep(poll_interval)
         
-        if not study_dataset:
+        if not study_data:
             elapsed = time.time() - start_time
             print(f"  ERROR: Study not found in Compass after {elapsed:.1f}s ({attempts} attempts)")
             print(f"  StudyInstanceUID: {study_uid}")
             print(f"  Possible reasons:")
             print(f"    - Study not yet processed by Compass (waited {timeout_seconds}s)")
             print(f"    - Compass routing without storing locally")
-            print(f"    - C-FIND not enabled on Compass")
+            print(f"    - Database connection/permissions issue")
             print(f"    - Study was rejected/filtered")
             raise AssertionError(
                 f"Study not found in Compass after {timeout_seconds}s: {study_uid}\n"
-                f"C-FIND query returned no results after {attempts} attempts. "
+                f"Database query returned no results after {attempts} attempts. "
                 f"Study may not have been received or stored."
             )
-        
-        # Convert dataset to dict for easier access
-        study_dict = client.dataset_to_dict(study_dataset)
         
         # Verify each expected attribute
         print(f"\n  Verifying expected transformations:")
@@ -306,10 +293,10 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
             dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
             
             # Get actual value from study
-            actual_value = study_dict.get(dicom_attr, None)
+            actual_value = study_data.get(dicom_attr, None)
             
             if actual_value is None:
-                print(f"    {dicom_attr}: NOT FOUND in response")
+                print(f"    {dicom_attr}: NOT FOUND in database")
                 all_matched = False
             elif str(actual_value).strip() == str(expected_value).strip():
                 print(f"    {dicom_attr}: '{actual_value}' ✓ MATCH")
@@ -323,15 +310,15 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                 )
         
         if all_matched:
-            print(f"\n  ✓ C-FIND VERIFICATION PASSED - All transformations correct!")
+            print(f"\n  ✓ DATABASE VERIFICATION PASSED - All transformations correct!")
         else:
-            print(f"\n  ✗ C-FIND VERIFICATION FAILED - See mismatches above")
+            print(f"\n  ✗ DATABASE VERIFICATION FAILED - See mismatches above")
     
     except ConnectionError as e:
-        print(f"  ERROR: C-FIND connection failed: {e}")
-        print(f"  Cannot connect to Compass for verification")
+        print(f"  ERROR: Database connection failed: {e}")
+        print(f"  Cannot connect to Compass database for verification")
         raise AssertionError(
-            f"C-FIND connection failed: {e}\n"
+            f"Database connection failed: {e}\n"
             f"Cannot verify study was received by Compass."
         )
     
@@ -340,10 +327,10 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         raise
     
     except Exception as e:
-        print(f"  ERROR: C-FIND query failed: {e}")
+        print(f"  ERROR: Database query failed: {e}")
         print(f"  Unexpected error during verification")
         raise AssertionError(
-            f"C-FIND query failed: {e}\n"
+            f"Database query failed: {e}\n"
             f"Cannot verify study was received by Compass."
         )
 

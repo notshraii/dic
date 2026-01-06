@@ -244,16 +244,18 @@ class CompassDatabaseClient:
         
         return self.execute_query(query, (job_id,))
     
-    def get_job_by_study_uid(self, study_uid: str) -> Optional[Dict[str, Any]]:
+    def get_job_by_study_uid(self, study_uid: str, include_tags: bool = True) -> Optional[Dict[str, Any]]:
         """
-        Get job information by Study Instance UID.
+        Get job information by Study Instance UID with all DICOM tags.
         
         Args:
             study_uid: Study Instance UID to search for
+            include_tags: If True, includes all DICOM tags in response (default: True)
             
         Returns:
-            Job dictionary or None if not found
+            Dictionary with job info and DICOM tags, or None if not found
         """
+        # First, get the job record
         query = """
         SELECT TOP 1
             JobID,
@@ -274,7 +276,24 @@ class CompassDatabaseClient:
         """
         
         results = self.execute_query(query, (study_uid,))
-        return results[0] if results else None
+        if not results:
+            return None
+        
+        job = results[0]
+        
+        # If include_tags is True, fetch DICOM tags and merge them into the result
+        if include_tags:
+            job_id = job.get('JobID')
+            if job_id:
+                tags = self.get_dicom_tags(job_id)
+                # Convert tags list to dict with TagName as key and Value as value
+                for tag in tags:
+                    tag_name = tag.get('TagName')
+                    tag_value = tag.get('Value')
+                    if tag_name:
+                        job[tag_name] = tag_value
+        
+        return job
     
     def test_connection(self) -> bool:
         """
