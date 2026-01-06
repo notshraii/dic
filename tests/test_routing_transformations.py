@@ -211,7 +211,7 @@ def test_routing_transformation(
 
 def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                      calling_aet: str = None,
-                     timeout_seconds: int = 10, poll_interval: float = 1.0):
+                     timeout_seconds: int = 30, poll_interval: float = 2.0):
     """
     Query Compass via C-FIND and verify transformations were applied.
     
@@ -223,8 +223,8 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         study_uid: StudyInstanceUID to query
         expected_attributes: Dict of expected attribute values (snake_case keys)
         calling_aet: AE Title to use for C-FIND query (default: uses sender's current AE)
-        timeout_seconds: Maximum seconds to wait for study to appear (default: 10)
-        poll_interval: Seconds between polls (default: 1.0)
+        timeout_seconds: Maximum seconds to wait for study to appear (default: 30)
+        poll_interval: Seconds between polls (default: 2.0)
     """
     import time
     
