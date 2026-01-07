@@ -213,43 +213,40 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                      calling_aet: str = None,
                      timeout_seconds: int = 30, poll_interval: float = 2.0):
     """
-    Query Compass API and verify transformations were applied.
+    Query Compass database and verify transformations were applied.
     
-    Uses the Compass REST API (same endpoint as web UI).
-    Polls Compass API for up to timeout_seconds waiting for study to appear.
+    Uses database queries to find studies and DICOM tags.
+    Polls Compass database for up to timeout_seconds waiting for study to appear.
     
     Args:
         dicom_sender: DicomSender instance
         study_uid: StudyInstanceUID to query
         expected_attributes: Dict of expected attribute values (snake_case keys)
-        calling_aet: Not used for API queries (kept for compatibility)
+        calling_aet: Not used for database queries (kept for compatibility)
         timeout_seconds: Maximum seconds to wait for study to appear (default: 30)
         poll_interval: Seconds between polls (default: 2.0)
     """
     import time
     
-    print(f"\n  [AUTOMATED VERIFICATION VIA COMPASS API]")
-    print(f"  Querying Compass API for study: {study_uid}")
+    print(f"\n  [AUTOMATED VERIFICATION VIA DATABASE QUERY]")
+    print(f"  Querying Compass database for study: {study_uid}")
     print(f"  Timeout: {timeout_seconds}s")
     
     try:
-        from compass_api_client import CompassAPIClient, CompassAPIConfig
+        from compass_db_query import CompassDatabaseClient, CompassDatabaseConfig
     except ImportError:
-        print(f"  ERROR: compass_api_client not available")
+        print(f"  ERROR: compass_db_query not available")
         print(f"  Cannot perform automated verification")
         raise AssertionError(
-            "compass_api_client module not available. "
+            "compass_db_query module not available. "
             "Automated verification cannot run."
         )
     
     try:
-        # Load API config from environment
-        config = CompassAPIConfig.from_env()
+        # Load database config from environment
+        config = CompassDatabaseConfig.from_env()
         
-        print(f"  API URL: {config.base_url}")
-        
-        # Create API client
-        client = CompassAPIClient(config)
+        print(f"  Database: {config.database} on {config.server}")
         
         # Poll for the study with timeout
         start_time = time.time()
@@ -259,7 +256,8 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         while time.time() - start_time < timeout_seconds:
             attempts += 1
             
-            study_data = client.get_job_by_study_uid(study_uid)
+            with CompassDatabaseClient(config) as client:
+                study_data = client.get_job_by_study_uid(study_uid)
             
             if study_data:
                 elapsed = time.time() - start_time
@@ -267,7 +265,7 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                 break
             
             if attempts == 1:
-                print(f"  Waiting for study to appear in Compass...")
+                print(f"  Waiting for study to appear in Compass database...")
             
             time.sleep(poll_interval)
         
@@ -278,11 +276,11 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
             print(f"  Possible reasons:")
             print(f"    - Study not yet processed by Compass (waited {timeout_seconds}s)")
             print(f"    - Compass routing without storing locally")
-            print(f"    - API connection issue")
+            print(f"    - Database connection/permissions issue")
             print(f"    - Study was rejected/filtered")
             raise AssertionError(
                 f"Study not found in Compass after {timeout_seconds}s: {study_uid}\n"
-                f"API query returned no results after {attempts} attempts. "
+                f"Database query returned no results after {attempts} attempts. "
                 f"Study may not have been received or stored."
             )
         
@@ -291,40 +289,36 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         all_matched = True
         
         for attr_name, expected_value in expected_attributes.items():
-            # Convert snake_case to camelCase (API uses camelCase)
-            words = attr_name.split('_')
-            camel_case_attr = words[0].lower() + ''.join(word.capitalize() for word in words[1:])
+            # Convert snake_case to PascalCase DICOM attribute name
+            dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
             
-            # Also try PascalCase
-            pascal_case_attr = ''.join(word.capitalize() for word in words)
-            
-            # Get actual value from study (try both formats)
-            actual_value = study_data.get(camel_case_attr) or study_data.get(pascal_case_attr)
+            # Get actual value from study
+            actual_value = study_data.get(dicom_attr, None)
             
             if actual_value is None:
-                print(f"    {camel_case_attr}: NOT FOUND in API response")
+                print(f"    {dicom_attr}: NOT FOUND in database")
                 all_matched = False
             elif str(actual_value).strip() == str(expected_value).strip():
-                print(f"    {camel_case_attr}: '{actual_value}' ✓ MATCH")
+                print(f"    {dicom_attr}: '{actual_value}' ✓ MATCH")
             else:
-                print(f"    {camel_case_attr}: '{actual_value}' ✗ MISMATCH")
+                print(f"    {dicom_attr}: '{actual_value}' ✗ MISMATCH")
                 print(f"      Expected: '{expected_value}'")
                 all_matched = False
                 # Raise assertion error for test failure
                 raise AssertionError(
-                    f"{camel_case_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
+                    f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
                 )
         
         if all_matched:
-            print(f"\n  ✓ API VERIFICATION PASSED - All transformations correct!")
+            print(f"\n  ✓ DATABASE VERIFICATION PASSED - All transformations correct!")
         else:
-            print(f"\n  ✗ API VERIFICATION FAILED - See mismatches above")
+            print(f"\n  ✗ DATABASE VERIFICATION FAILED - See mismatches above")
     
     except ConnectionError as e:
-        print(f"  ERROR: API connection failed: {e}")
-        print(f"  Cannot connect to Compass API for verification")
+        print(f"  ERROR: Database connection failed: {e}")
+        print(f"  Cannot connect to Compass database for verification")
         raise AssertionError(
-            f"API connection failed: {e}\n"
+            f"Database connection failed: {e}\n"
             f"Cannot verify study was received by Compass."
         )
     
@@ -333,10 +327,10 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
         raise
     
     except Exception as e:
-        print(f"  ERROR: API query failed: {e}")
+        print(f"  ERROR: Database query failed: {e}")
         print(f"  Unexpected error during verification")
         raise AssertionError(
-            f"API query failed: {e}\n"
+            f"Database query failed: {e}\n"
             f"Cannot verify study was received by Compass."
         )
 
