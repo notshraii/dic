@@ -299,9 +299,9 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                 print(f"    {dicom_attr}: NOT FOUND in database")
                 all_matched = False
             elif str(actual_value).strip() == str(expected_value).strip():
-                print(f"    {dicom_attr}: '{actual_value}' ✓ MATCH")
+                print(f"    {dicom_attr}: '{actual_value}' - MATCH")
             else:
-                print(f"    {dicom_attr}: '{actual_value}' ✗ MISMATCH")
+                print(f"    {dicom_attr}: '{actual_value}' - MISMATCH")
                 print(f"      Expected: '{expected_value}'")
                 all_matched = False
                 # Raise assertion error for test failure
@@ -310,9 +310,9 @@ def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
                 )
         
         if all_matched:
-            print(f"\n  ✓ DATABASE VERIFICATION PASSED - All transformations correct!")
+            print(f"\n  DATABASE VERIFICATION PASSED - All transformations correct!")
         else:
-            print(f"\n  ✗ DATABASE VERIFICATION FAILED - See mismatches above")
+            print(f"\n  DATABASE VERIFICATION FAILED - See mismatches above")
     
     except ConnectionError as e:
         print(f"  ERROR: Database connection failed: {e}")

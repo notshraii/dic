@@ -304,52 +304,83 @@ class CompassDatabaseClient:
     
     def get_job_by_study_uid(self, study_uid: str, include_tags: bool = True) -> Optional[Dict[str, Any]]:
         """
-        Get job information by Study Instance UID with all DICOM tags.
+        Get study mapping information by Study Instance UID.
+        
+        Queries the STUDY_MAPPING table which contains both ORIGINAL (before transformation)
+        and MAYO (after transformation) values for routing verification.
         
         Args:
-            study_uid: Study Instance UID to search for
-            include_tags: If True, includes all DICOM tags in response (default: True)
+            study_uid: Study Instance UID to search for (matches ORIGINAL_STUDY_UID)
+            include_tags: Unused, kept for API compatibility
             
         Returns:
-            Dictionary with job info and DICOM tags, or None if not found
+            Dictionary with study mapping info including:
+            - ORIGINAL_* fields: Values before transformation
+            - MAYO_* fields: Values after transformation (from routing rules)
+            - Standard fields mapped for compatibility:
+              - StudyInstanceUID, PatientID, PatientName, AccessionNumber
+            Returns None if not found
         """
-        # First, get the job record
         query = """
         SELECT TOP 1
-            JobID,
-            StudyInstanceUID,
-            PatientID,
-            PatientName,
-            AccessionNumber,
-            Modality,
-            StudyDate,
-            CallingAET,
-            DestinationAET,
-            Status,
-            CreatedAt,
-            CompletedAt,
-            ImageCount
-        FROM Jobs
-        WHERE StudyInstanceUID = ?
+            ID,
+            CREATION_TIME,
+            ORIGINAL_PATIENT_ID,
+            ORIGINAL_PATIENT_NAME,
+            ORIGINAL_PATIENT_DOB,
+            ORIGINAL_PATIENT_SEX,
+            ORIGINAL_ACCESSION,
+            ORIGINAL_STUDY_UID,
+            MAYO_PATIENT_ID,
+            MAYO_PATIENT_NAME,
+            MAYO_PATIENT_DOB,
+            MAYO_PATIENT_SEX,
+            MAYO_ACCESSION,
+            MAYO_STUDY_UID,
+            STUDY_DESC,
+            STUDY_DATETIME
+        FROM STUDY_MAPPING
+        WHERE ORIGINAL_STUDY_UID = ?
+        ORDER BY CREATION_TIME DESC
         """
         
         results = self.execute_query(query, (study_uid,))
         if not results:
             return None
         
-        job = results[0]
+        row = results[0]
         
-        # If include_tags is True, fetch DICOM tags and merge them into the result
-        if include_tags:
-            job_id = job.get('JobID')
-            if job_id:
-                tags = self.get_dicom_tags(job_id)
-                # Convert tags list to dict with TagName as key and Value as value
-                for tag in tags:
-                    tag_name = tag.get('TagName')
-                    tag_value = tag.get('Value')
-                    if tag_name:
-                        job[tag_name] = tag_value
+        # Map to standard field names for compatibility with existing test code
+        # Use MAYO_* values as the "current" values (post-transformation)
+        job = {
+            # Primary identifiers
+            'ID': row.get('ID'),
+            'StudyInstanceUID': row.get('ORIGINAL_STUDY_UID'),
+            'CreatedAt': row.get('CREATION_TIME'),
+            
+            # Post-transformation values (what routing rules applied)
+            'PatientID': row.get('MAYO_PATIENT_ID'),
+            'PatientName': row.get('MAYO_PATIENT_NAME'),
+            'AccessionNumber': row.get('MAYO_ACCESSION'),
+            'PatientBirthDate': row.get('MAYO_PATIENT_DOB'),
+            'PatientSex': row.get('MAYO_PATIENT_SEX'),
+            'MayoStudyUID': row.get('MAYO_STUDY_UID'),
+            
+            # Pre-transformation values (what was sent)
+            'OriginalPatientID': row.get('ORIGINAL_PATIENT_ID'),
+            'OriginalPatientName': row.get('ORIGINAL_PATIENT_NAME'),
+            'OriginalAccessionNumber': row.get('ORIGINAL_ACCESSION'),
+            'OriginalPatientBirthDate': row.get('ORIGINAL_PATIENT_DOB'),
+            'OriginalPatientSex': row.get('ORIGINAL_PATIENT_SEX'),
+            'OriginalStudyUID': row.get('ORIGINAL_STUDY_UID'),
+            
+            # Study info
+            'StudyDescription': row.get('STUDY_DESC'),
+            'StudyDateTime': row.get('STUDY_DATETIME'),
+            
+            # Keep raw row data for debugging
+            '_raw': row,
+        }
         
         return job
     
