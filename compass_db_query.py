@@ -324,10 +324,18 @@ class CompassDatabaseClient:
               - StudyInstanceUID, PatientID, PatientName, AccessionNumber
             Returns None if not found
         """
-        # ORIGINAL_STUDY_UID truncates at 37 chars, so compare first 37 chars only
-        truncate_length = 37
-        truncated_uid = study_uid[:truncate_length] if len(study_uid) > truncate_length else study_uid
+        # First try STUDY_MAPPING table (has transformation data)
+        result = self._query_study_mapping(study_uid)
+        if result:
+            return result
         
+        # Fallback to MCIE_ENTRIES if not found in STUDY_MAPPING
+        logger.info(f"Study not found in STUDY_MAPPING, trying MCIE_ENTRIES...")
+        return self._query_mcie_entries(study_uid)
+    
+    def _query_study_mapping(self, study_uid: str) -> Optional[Dict[str, Any]]:
+        """Query STUDY_MAPPING table for transformation data."""
+        # ORIGINAL_STUDY_UID truncates at 37 chars, so compare first 37 chars only
         query = """
         SELECT TOP 1
             ID,
@@ -358,8 +366,10 @@ class CompassDatabaseClient:
         row = results[0]
         
         # Map to standard field names for compatibility with existing test code
-        # Use MAYO_* values as the "current" values (post-transformation)
         job = {
+            # Source table
+            '_source_table': 'STUDY_MAPPING',
+            
             # Primary identifiers
             'ID': row.get('ID'),
             'StudyInstanceUID': row.get('ORIGINAL_STUDY_UID'),
@@ -390,6 +400,104 @@ class CompassDatabaseClient:
         }
         
         return job
+    
+    def _query_mcie_entries(self, study_uid: str) -> Optional[Dict[str, Any]]:
+        """Query MCIE_ENTRIES table (fallback if not in STUDY_MAPPING)."""
+        query = """
+        SELECT TOP 1
+            MCIE_ID,
+            STUDY_UID,
+            DICOM_NAME,
+            MDM_NAME,
+            PATIENT_ID
+        FROM MCIE_ENTRIES
+        WHERE STUDY_UID LIKE ?
+        ORDER BY MCIE_ID DESC
+        """
+        
+        # Use LIKE with % for partial match since column might not be truncated
+        results = self.execute_query(query, (study_uid[:37] + '%',))
+        if not results:
+            return None
+        
+        row = results[0]
+        
+        job = {
+            '_source_table': 'MCIE_ENTRIES',
+            'ID': row.get('MCIE_ID'),
+            'StudyInstanceUID': row.get('STUDY_UID'),
+            'PatientName': row.get('DICOM_NAME'),
+            'PatientID': row.get('PATIENT_ID'),
+            '_raw': row,
+        }
+        
+        return job
+    
+    def get_job_by_patient_name(self, patient_name: str) -> List[Dict[str, Any]]:
+        """
+        Search for studies by patient name.
+        
+        Searches both STUDY_MAPPING (ORIGINAL_PATIENT_NAME) and 
+        MCIE_ENTRIES (DICOM_NAME) tables.
+        
+        Args:
+            patient_name: Patient name to search for (supports % wildcards)
+            
+        Returns:
+            List of matching study records
+        """
+        results = []
+        
+        # Search STUDY_MAPPING
+        query1 = """
+        SELECT TOP 20
+            ID,
+            CREATION_TIME,
+            ORIGINAL_PATIENT_NAME,
+            MAYO_PATIENT_NAME,
+            ORIGINAL_STUDY_UID,
+            STUDY_DESC
+        FROM STUDY_MAPPING
+        WHERE ORIGINAL_PATIENT_NAME LIKE ? OR MAYO_PATIENT_NAME LIKE ?
+        ORDER BY CREATION_TIME DESC
+        """
+        
+        search_pattern = f'%{patient_name}%'
+        mapping_results = self.execute_query(query1, (search_pattern, search_pattern))
+        for row in mapping_results:
+            results.append({
+                '_source_table': 'STUDY_MAPPING',
+                'ID': row.get('ID'),
+                'CreatedAt': row.get('CREATION_TIME'),
+                'OriginalPatientName': row.get('ORIGINAL_PATIENT_NAME'),
+                'PatientName': row.get('MAYO_PATIENT_NAME'),
+                'StudyInstanceUID': row.get('ORIGINAL_STUDY_UID'),
+                'StudyDescription': row.get('STUDY_DESC'),
+            })
+        
+        # Search MCIE_ENTRIES
+        query2 = """
+        SELECT TOP 20
+            MCIE_ID,
+            DICOM_NAME,
+            STUDY_UID,
+            PATIENT_ID
+        FROM MCIE_ENTRIES
+        WHERE DICOM_NAME LIKE ?
+        ORDER BY MCIE_ID DESC
+        """
+        
+        mcie_results = self.execute_query(query2, (search_pattern,))
+        for row in mcie_results:
+            results.append({
+                '_source_table': 'MCIE_ENTRIES',
+                'ID': row.get('MCIE_ID'),
+                'PatientName': row.get('DICOM_NAME'),
+                'StudyInstanceUID': row.get('STUDY_UID'),
+                'PatientID': row.get('PATIENT_ID'),
+            })
+        
+        return results
     
     def test_connection(self) -> bool:
         """
