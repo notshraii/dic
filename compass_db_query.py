@@ -309,6 +309,9 @@ class CompassDatabaseClient:
         Queries the STUDY_MAPPING table which contains both ORIGINAL (before transformation)
         and MAYO (after transformation) values for routing verification.
         
+        Note: ORIGINAL_STUDY_UID column truncates at 37 characters, so we use
+        LEFT() comparison to match truncated UIDs.
+        
         Args:
             study_uid: Study Instance UID to search for (matches ORIGINAL_STUDY_UID)
             include_tags: Unused, kept for API compatibility
@@ -321,6 +324,10 @@ class CompassDatabaseClient:
               - StudyInstanceUID, PatientID, PatientName, AccessionNumber
             Returns None if not found
         """
+        # ORIGINAL_STUDY_UID truncates at 37 chars, so compare first 37 chars only
+        truncate_length = 37
+        truncated_uid = study_uid[:truncate_length] if len(study_uid) > truncate_length else study_uid
+        
         query = """
         SELECT TOP 1
             ID,
@@ -340,7 +347,7 @@ class CompassDatabaseClient:
             STUDY_DESC,
             STUDY_DATETIME
         FROM STUDY_MAPPING
-        WHERE ORIGINAL_STUDY_UID = ?
+        WHERE LEFT(ORIGINAL_STUDY_UID, 37) = LEFT(?, 37)
         ORDER BY CREATION_TIME DESC
         """
         
