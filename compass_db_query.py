@@ -79,6 +79,14 @@ class CompassDatabaseClient:
         driver = self._detect_odbc_driver(pyodbc)
         logger.info(f"Using ODBC driver: {driver}")
         
+        # SSL/TLS settings for ODBC Driver 18+
+        # Driver 18 enforces encryption by default, so we need to trust the server certificate
+        # for internal servers that may use self-signed certificates
+        ssl_settings = ""
+        if "Driver 18" in driver or "Driver 17" in driver:
+            ssl_settings = "TrustServerCertificate=yes;"
+            logger.info("Adding TrustServerCertificate=yes for ODBC Driver 17/18")
+        
         # Build connection string
         if self.config.use_windows_auth:
             conn_str = (
@@ -86,6 +94,7 @@ class CompassDatabaseClient:
                 f"SERVER={self.config.server},{self.config.port};"
                 f"DATABASE={self.config.database};"
                 f"Trusted_Connection=yes;"
+                f"{ssl_settings}"
             )
         else:
             if not self.config.username or not self.config.password:
@@ -96,6 +105,7 @@ class CompassDatabaseClient:
                 f"DATABASE={self.config.database};"
                 f"UID={self.config.username};"
                 f"PWD={self.config.password};"
+                f"{ssl_settings}"
             )
         
         logger.info(f"Connecting to database {self.config.database} on {self.config.server}...")
