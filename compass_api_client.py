@@ -60,7 +60,8 @@ class CompassAPIClient:
         self.session = requests.Session()
         self.session.verify = config.verify_ssl
         
-        # Set up authentication
+        # Compass API typically doesn't require authentication for read operations
+        # But set it up if provided
         if config.api_key:
             self.session.headers.update({
                 "Authorization": f"Bearer {config.api_key}"
@@ -107,6 +108,130 @@ class CompassAPIClient:
             if hasattr(e, 'response') and e.response is not None:
                 logger.error(f"Response: {e.response.text}")
             raise
+    
+    # ========================================================================
+    # Compass-Specific API Methods
+    # ========================================================================
+    
+    def get_dicom_jobs_datatable(
+        self,
+        draw: int = 1,
+        start: int = 0,
+        length: int = 100,
+        search_value: str = "",
+        order_column: int = 0,
+        order_dir: str = "desc"
+    ) -> Dict[str, Any]:
+        """
+        Query the DicomJobs DataTable API (same endpoint as web UI).
+        
+        This is the actual endpoint the Compass web UI uses.
+        
+        Args:
+            draw: DataTable draw counter
+            start: Starting record for pagination
+            length: Number of records to return
+            search_value: Global search value
+            order_column: Column index to sort by
+            order_dir: Sort direction ('asc' or 'desc')
+            
+        Returns:
+            DataTable response with job data
+        """
+        # Build DataTable POST request
+        # The web UI sends this as form data, not JSON
+        data = {
+            "draw": draw,
+            "start": start,
+            "length": length,
+            "search[value]": search_value,
+            "search[regex]": "false",
+            "order[0][column]": order_column,
+            "order[0][dir]": order_dir,
+        }
+        
+        # Add column definitions (28 columns from web UI)
+        for i in range(29):
+            data[f"columns[{i}][data]"] = ""
+            data[f"columns[{i}][name]"] = ""
+            data[f"columns[{i}][searchable]"] = "true"
+            data[f"columns[{i}][orderable]"] = "true"
+            data[f"columns[{i}][search][value]"] = ""
+            data[f"columns[{i}][search][regex]"] = "false"
+        
+        url = f"{self.config.base_url}/api/DicomJobs/DataTable"
+        
+        try:
+            response = self.session.post(
+                url,
+                data=data,
+                timeout=self.config.timeout
+            )
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"DicomJobs DataTable API request failed: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response: {e.response.text}")
+            raise
+    
+    def search_dicom_jobs_by_study_uid(self, study_uid: str) -> List[Dict[str, Any]]:
+        """
+        Search for DICOM jobs by StudyInstanceUID using the DataTable API.
+        
+        Args:
+            study_uid: Study Instance UID to search for
+            
+        Returns:
+            List of matching jobs
+        """
+        result = self.get_dicom_jobs_datatable(
+            length=100,
+            search_value=study_uid
+        )
+        
+        if result and "data" in result:
+            return result["data"]
+        return []
+    
+    def get_job_by_study_uid(self, study_uid: str) -> Optional[Dict[str, Any]]:
+        """
+        Get job by Study Instance UID using the DicomJobs API.
+        
+        Args:
+            study_uid: Study Instance UID to search for
+            
+        Returns:
+            Job dictionary with all DICOM attributes, or None if not found
+        """
+        jobs = self.search_dicom_jobs_by_study_uid(study_uid)
+        
+        if not jobs:
+            return None
+        
+        # Return first match
+        # The DataTable API returns jobs as arrays, convert to dict
+        if isinstance(jobs[0], list):
+            # Map array positions to field names (from web UI inspector)
+            field_names = [
+                'id', '', 'patientName', 'patientId', 'accessionNumber',
+                'studyDate', 'modalities', 'imageIds.length', 'state',
+                'destinationName', 'sourceName', 'createdTime', 'failMessage',
+                'studyInstanceUid', 'lastModifiedTime', 'attempts', 'priority',
+                'sourceCallingAE', 'sourceCalledAE', 'sourceIPAddr', 'matchedRules',
+                'customCol1', 'customCol2', 'customCol3', 'customCol4', 'customCol5',
+                'customCol6', 'customCol7', 'customCol8'
+            ]
+            
+            job_dict = {}
+            for i, field_name in enumerate(field_names):
+                if i < len(jobs[0]) and field_name:
+                    job_dict[field_name] = jobs[0][i]
+            
+            return job_dict
+        else:
+            return jobs[0]
     
     # ========================================================================
     # API Methods (Update endpoints based on actual Compass API)
