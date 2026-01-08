@@ -132,6 +132,12 @@ def main():
         db_name = os.environ.get("COMPASS_DB_NAME", "ODM")
         db_user = os.environ.get("COMPASS_DB_USER", "")
         db_password = os.environ.get("COMPASS_DB_PASSWORD", "")
+        use_windows_auth = os.environ.get("COMPASS_DB_WINDOWS_AUTH", "false").lower() == "true"
+        
+        print(f"  Server: {db_server}")
+        print(f"  Database: {db_name}")
+        print(f"  User: {db_user if db_user else '(not set)'}")
+        print(f"  Windows Auth: {use_windows_auth}")
         
         # Find ODBC driver - prefer newer drivers
         all_drivers = pyodbc.drivers()
@@ -150,12 +156,19 @@ def main():
         
         print(f"  Using driver: {driver}")
         
-        # Build connection string - TrustServerCertificate only for newer drivers
-        if 'ODBC Driver 17' in driver or 'ODBC Driver 18' in driver:
-            conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password};TrustServerCertificate=yes"
+        # Build connection string
+        if use_windows_auth:
+            # Windows Authentication (Trusted Connection)
+            if 'ODBC Driver 17' in driver or 'ODBC Driver 18' in driver:
+                conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};Trusted_Connection=yes;TrustServerCertificate=yes"
+            else:
+                conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};Trusted_Connection=yes"
         else:
-            # Old "SQL Server" driver doesn't support TrustServerCertificate
-            conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password}"
+            # SQL Server Authentication
+            if 'ODBC Driver 17' in driver or 'ODBC Driver 18' in driver:
+                conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password};TrustServerCertificate=yes"
+            else:
+                conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password}"
         
         conn = pyodbc.connect(conn_str)
         cursor = conn.cursor()
