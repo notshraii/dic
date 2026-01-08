@@ -25,7 +25,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_GPA_VisualFields',
         'description': 'OPV modality with GPA series description should set Visual Fields study description',
-        'aet': 'ULTRA_MCR_FORUM',
+        # 'aet': Use LOCAL_AE_TITLE from .env (do not override)
         'input': {
             'modality': 'OPV',
             'series_description': 'GPA',
@@ -37,7 +37,6 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_SFA_VisualFields',
         'description': 'OPV modality with SFA series description should set Visual Fields study description',
-        'aet': 'ULTRA_MCR_FORUM',
         'input': {
             'modality': 'OPV',
             'series_description': 'SFA',
@@ -49,7 +48,6 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_Mixed_VisualFields',
         'description': 'OPV modality with mixed series description (GPA or SFA) should set Visual Fields',
-        'aet': 'ULTRA_MCR_FORUM',
         'input': {
             'modality': 'OPV',
             'series_description': 'Mixed Analysis',
@@ -61,7 +59,6 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPT_OCT',
         'description': 'OPT modality for Optical Coherence Tomography',
-        'aet': 'ULTRA_MCR_FORUM',
         'input': {
             'modality': 'OPT',
         },
@@ -72,7 +69,6 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OT_IOLMaster',
         'description': 'OT modality for IOL Master measurements',
-        'aet': 'ULTRA_MCR_FORUM',
         'input': {
             'modality': 'OT',
         },
@@ -83,7 +79,6 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'DOC_Combined',
         'description': 'DOC modality for combined OCT and VF report',
-        'aet': 'ULTRA_MCR_FORUM',
         'input': {
             'modality': 'DOC',
         },
@@ -95,7 +90,7 @@ TRANSFORMATION_TEST_CASES = [
     # {
     #     'name': 'TestCaseName',
     #     'description': 'Human-readable description',
-    #     'aet': 'SOURCE_AE_TITLE',
+    #     'aet': 'OPTIONAL_AE_OVERRIDE',  # Only if you need to override LOCAL_AE_TITLE from .env
     #     'input': {
     #         'modality': 'CT',
     #         'series_description': 'BRAIN',
@@ -169,9 +164,13 @@ def test_routing_transformation(
         print(f"  SeriesInstanceUID: {test_dataset.SeriesInstanceUID}")
         print(f"  SOPInstanceUID: {test_dataset.SOPInstanceUID}")
         
-        # Override AE title for this test
+        # Only override AE title if explicitly specified in test case
         original_ae_title = dicom_sender.endpoint.local_ae_title
-        dicom_sender.endpoint.local_ae_title = test_case['aet']
+        if test_case.get('aet'):
+            dicom_sender.endpoint.local_ae_title = test_case['aet']
+            print(f"\n[AE TITLE OVERRIDE: {test_case['aet']}]")
+        else:
+            print(f"\n[USING ENV AE TITLE: {original_ae_title}]")
         
         try:
             # Send to Compass
