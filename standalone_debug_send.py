@@ -173,47 +173,65 @@ def main():
         conn = pyodbc.connect(conn_str)
         cursor = conn.cursor()
         
-        # Search STUDY_MAPPING
+        # First, discover STUDY_MAPPING columns
+        print(f"\n  Discovering STUDY_MAPPING columns...")
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'STUDY_MAPPING'
+        """)
+        sm_cols = [row.COLUMN_NAME for row in cursor.fetchall()]
+        print(f"    Columns: {', '.join(sm_cols[:10])}...")
+        
+        # Search STUDY_MAPPING for our patient
         print(f"\n  Searching STUDY_MAPPING for 'STANDALONE'...")
         cursor.execute("""
-            SELECT TOP 5 CREATION_TIME, ORIGINAL_PATIENT_NAME, ORIGINAL_STUDY_UID
+            SELECT TOP 5 *
             FROM STUDY_MAPPING
             WHERE ORIGINAL_PATIENT_NAME LIKE '%STANDALONE%'
-            ORDER BY CREATION_TIME DESC
+            ORDER BY ID DESC
         """)
         rows = cursor.fetchall()
         if rows:
             print(f"  Found {len(rows)} records:")
             for row in rows:
-                print(f"    {row.CREATION_TIME} | {row.ORIGINAL_PATIENT_NAME}")
+                print(f"    ID={row.ID} | {row.ORIGINAL_PATIENT_NAME}")
         else:
             print(f"  No STANDALONE records in STUDY_MAPPING")
+        
+        # Discover MCIE_ENTRIES columns
+        print(f"\n  Discovering MCIE_ENTRIES columns...")
+        cursor.execute("""
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = 'MCIE_ENTRIES'
+        """)
+        mcie_cols = [row.COLUMN_NAME for row in cursor.fetchall()]
+        print(f"    Columns: {', '.join(mcie_cols[:10])}...")
         
         # Search MCIE_ENTRIES
         print(f"\n  Searching MCIE_ENTRIES for 'STANDALONE'...")
         cursor.execute("""
-            SELECT TOP 5 CREATION_TIME, DICOM_NAME, STUDY_UID
+            SELECT TOP 5 *
             FROM MCIE_ENTRIES
             WHERE DICOM_NAME LIKE '%STANDALONE%'
-            ORDER BY CREATION_TIME DESC
+            ORDER BY MCIE_ID DESC
         """)
         rows = cursor.fetchall()
         if rows:
             print(f"  Found {len(rows)} records:")
             for row in rows:
-                print(f"    {row.CREATION_TIME} | {row.DICOM_NAME}")
+                print(f"    ID={row.MCIE_ID} | {row.DICOM_NAME}")
         else:
             print(f"  No STANDALONE records in MCIE_ENTRIES")
         
-        # Show recent records
-        print(f"\n  Most recent STUDY_MAPPING records:")
+        # Show recent records from STUDY_MAPPING
+        print(f"\n  Most recent STUDY_MAPPING records (by ID):")
         cursor.execute("""
-            SELECT TOP 3 CREATION_TIME, ORIGINAL_PATIENT_NAME
+            SELECT TOP 3 ID, ORIGINAL_PATIENT_NAME
             FROM STUDY_MAPPING
-            ORDER BY CREATION_TIME DESC
+            ORDER BY ID DESC
         """)
         for row in cursor.fetchall():
-            print(f"    {row.CREATION_TIME} | {row.ORIGINAL_PATIENT_NAME}")
+            print(f"    ID={row.ID} | {row.ORIGINAL_PATIENT_NAME}")
         
         conn.close()
         
