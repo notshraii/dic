@@ -3,7 +3,7 @@
 Standalone debug script - no project imports required.
 Just sends a test DICOM and searches the database.
 
-VERSION: 6 - Lists all databases and tables, searches all columns
+VERSION: 7 - Shows full record when found
 
 Usage:
     python standalone_debug_send.py
@@ -275,6 +275,13 @@ def main():
         
         if found_tables:
             print(f"\n  STANDALONE found in {len(found_tables)} location(s)")
+            for tbl, col in found_tables:
+                print(f"\n  Full record from {tbl}:")
+                cursor.execute(f"SELECT TOP 1 * FROM [{tbl}] WHERE CAST([{col}] AS NVARCHAR(MAX)) LIKE '%STANDALONE%'")
+                row = cursor.fetchone()
+                cols = [desc[0] for desc in cursor.description]
+                for i, c in enumerate(cols):
+                    print(f"    {c}: {row[i]}")
         else:
             print(f"\n  STANDALONE not found in any column of any table in {db_name}!")
             print(f"  The dashboard may be reading from a DIFFERENT database.")
