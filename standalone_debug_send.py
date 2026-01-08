@@ -233,44 +233,49 @@ def main():
         for row in cursor.fetchall():
             print(f"    ID={row.ID} | {row.ORIGINAL_PATIENT_NAME}")
         
-        # Search ALL tables for STANDALONE
-        print(f"\n  Searching ALL tables for 'STANDALONE'...")
+        # List all databases on this server
+        print(f"\n  Databases on this server:")
+        cursor.execute("SELECT name FROM sys.databases WHERE name NOT IN ('master','tempdb','model','msdb')")
+        for row in cursor.fetchall():
+            print(f"    - {row.name}")
+        
+        # List all tables in current database
+        print(f"\n  Tables in {db_name}:")
+        cursor.execute("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME")
+        tables = [row.TABLE_NAME for row in cursor.fetchall()]
+        for t in tables:
+            print(f"    - {t}")
+        
+        # Search ALL string columns in ALL tables
+        print(f"\n  Searching ALL string columns for 'STANDALONE'...")
         cursor.execute("""
             SELECT TABLE_NAME, COLUMN_NAME 
             FROM INFORMATION_SCHEMA.COLUMNS 
             WHERE DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext')
-            AND (COLUMN_NAME LIKE '%NAME%' OR COLUMN_NAME LIKE '%PATIENT%')
         """)
         searchable = cursor.fetchall()
-        print(f"    Found {len(searchable)} searchable columns")
+        print(f"    Found {len(searchable)} searchable columns across all tables")
         
         found_tables = []
         for table_name, column_name in searchable:
             try:
                 cursor.execute(f"""
-                    SELECT TOP 1 '{table_name}' as tbl, '{column_name}' as col
+                    SELECT TOP 1 1
                     FROM [{table_name}]
-                    WHERE [{column_name}] LIKE '%STANDALONE%'
+                    WHERE CAST([{column_name}] AS NVARCHAR(MAX)) LIKE '%STANDALONE%'
                 """)
                 result = cursor.fetchone()
                 if result:
                     found_tables.append((table_name, column_name))
                     print(f"    FOUND in {table_name}.{column_name}")
-            except:
-                pass  # Skip tables we can't query
+            except Exception as e:
+                pass  # Skip columns we can't query
         
         if found_tables:
-            print(f"\n  STANDALONE found in {len(found_tables)} table(s):")
-            for tbl, col in found_tables:
-                cursor.execute(f"SELECT TOP 3 * FROM [{tbl}] WHERE [{col}] LIKE '%STANDALONE%'")
-                rows = cursor.fetchall()
-                cols = [desc[0] for desc in cursor.description]
-                print(f"\n    Table: {tbl}")
-                print(f"    Columns: {', '.join(cols[:8])}...")
-                for row in rows:
-                    print(f"    Row: {list(row)[:5]}...")
+            print(f"\n  STANDALONE found in {len(found_tables)} location(s)")
         else:
-            print(f"\n  STANDALONE not found in any table!")
+            print(f"\n  STANDALONE not found in any column of any table in {db_name}!")
+            print(f"  The dashboard may be reading from a DIFFERENT database.")
         
         conn.close()
         
