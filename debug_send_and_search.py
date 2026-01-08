@@ -45,18 +45,52 @@ def main():
     print(f"  Called AE (Compass): {config.remote_ae_title}")
     print(f"  Calling AE (You): {config.local_ae_title}")
     
-    # Find a sample DICOM file
-    sample_files = list(Path("dicom_samples").glob("*.dcm"))
-    if not sample_files:
-        print("ERROR: No DICOM files found in dicom_samples/")
-        sys.exit(1)
+    # Find a sample DICOM file - check multiple locations
+    sample_file = None
+    search_paths = [
+        project_root / "dicom_samples",
+        Path("dicom_samples"),
+        Path.cwd() / "dicom_samples",
+    ]
     
-    sample_file = sample_files[0]
-    print(f"\n[SOURCE FILE]")
-    print(f"  Using: {sample_file}")
+    for search_path in search_paths:
+        if search_path.exists():
+            sample_files = list(search_path.glob("*.dcm"))
+            if sample_files:
+                sample_file = sample_files[0]
+                break
     
-    # Create test dataset with unique identifiers
-    ds = pydicom.dcmread(str(sample_file))
+    if sample_file:
+        print(f"\n[SOURCE FILE]")
+        print(f"  Using: {sample_file}")
+        ds = pydicom.dcmread(str(sample_file))
+    else:
+        # Create a synthetic DICOM if no samples found
+        print(f"\n[SOURCE FILE]")
+        print(f"  No sample files found - creating synthetic DICOM")
+        
+        import numpy as np
+        from pydicom.dataset import Dataset, FileDataset
+        from pydicom.uid import ExplicitVRLittleEndian
+        
+        # Create minimal valid DICOM
+        file_meta = Dataset()
+        file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.2"  # CT Image Storage
+        file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+        file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+        
+        ds = FileDataset(None, {}, file_meta=file_meta, preamble=b"\0" * 128)
+        ds.SOPClassUID = file_meta.MediaStorageSOPClassUID
+        ds.Modality = "CT"
+        ds.Rows = 64
+        ds.Columns = 64
+        ds.BitsAllocated = 16
+        ds.BitsStored = 12
+        ds.HighBit = 11
+        ds.PixelRepresentation = 0
+        ds.SamplesPerPixel = 1
+        ds.PhotometricInterpretation = "MONOCHROME2"
+        ds.PixelData = np.zeros((64, 64), dtype=np.uint16).tobytes()
     
     # Set unique identifiers
     timestamp = time.strftime("%H%M%S")
@@ -173,4 +207,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
