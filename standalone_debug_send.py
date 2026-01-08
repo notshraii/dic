@@ -133,15 +133,29 @@ def main():
         db_user = os.environ.get("COMPASS_DB_USER", "")
         db_password = os.environ.get("COMPASS_DB_PASSWORD", "")
         
-        # Find ODBC driver
-        drivers = [d for d in pyodbc.drivers() if 'SQL Server' in d]
-        if not drivers:
+        # Find ODBC driver - prefer newer drivers
+        all_drivers = pyodbc.drivers()
+        sql_drivers = [d for d in all_drivers if 'SQL Server' in d]
+        if not sql_drivers:
             print(f"  ERROR: No SQL Server ODBC driver found")
+            print(f"  Available drivers: {all_drivers}")
             return
-        driver = drivers[0]
+        
+        # Prefer ODBC Driver 17/18 over old "SQL Server" driver
+        driver = sql_drivers[0]
+        for d in sql_drivers:
+            if 'ODBC Driver 17' in d or 'ODBC Driver 18' in d:
+                driver = d
+                break
+        
         print(f"  Using driver: {driver}")
         
-        conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password};TrustServerCertificate=yes"
+        # Build connection string - TrustServerCertificate only for newer drivers
+        if 'ODBC Driver 17' in driver or 'ODBC Driver 18' in driver:
+            conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password};TrustServerCertificate=yes"
+        else:
+            # Old "SQL Server" driver doesn't support TrustServerCertificate
+            conn_str = f"DRIVER={{{driver}}};SERVER={db_server};DATABASE={db_name};UID={db_user};PWD={db_password}"
         
         conn = pyodbc.connect(conn_str)
         cursor = conn.cursor()
