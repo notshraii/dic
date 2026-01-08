@@ -233,6 +233,45 @@ def main():
         for row in cursor.fetchall():
             print(f"    ID={row.ID} | {row.ORIGINAL_PATIENT_NAME}")
         
+        # Search ALL tables for STANDALONE
+        print(f"\n  Searching ALL tables for 'STANDALONE'...")
+        cursor.execute("""
+            SELECT TABLE_NAME, COLUMN_NAME 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE DATA_TYPE IN ('varchar', 'nvarchar', 'char', 'nchar', 'text', 'ntext')
+            AND (COLUMN_NAME LIKE '%NAME%' OR COLUMN_NAME LIKE '%PATIENT%')
+        """)
+        searchable = cursor.fetchall()
+        print(f"    Found {len(searchable)} searchable columns")
+        
+        found_tables = []
+        for table_name, column_name in searchable:
+            try:
+                cursor.execute(f"""
+                    SELECT TOP 1 '{table_name}' as tbl, '{column_name}' as col
+                    FROM [{table_name}]
+                    WHERE [{column_name}] LIKE '%STANDALONE%'
+                """)
+                result = cursor.fetchone()
+                if result:
+                    found_tables.append((table_name, column_name))
+                    print(f"    FOUND in {table_name}.{column_name}")
+            except:
+                pass  # Skip tables we can't query
+        
+        if found_tables:
+            print(f"\n  STANDALONE found in {len(found_tables)} table(s):")
+            for tbl, col in found_tables:
+                cursor.execute(f"SELECT TOP 3 * FROM [{tbl}] WHERE [{col}] LIKE '%STANDALONE%'")
+                rows = cursor.fetchall()
+                cols = [desc[0] for desc in cursor.description]
+                print(f"\n    Table: {tbl}")
+                print(f"    Columns: {', '.join(cols[:8])}...")
+                for row in rows:
+                    print(f"    Row: {list(row)[:5]}...")
+        else:
+            print(f"\n  STANDALONE not found in any table!")
+        
         conn.close()
         
     except ImportError:
