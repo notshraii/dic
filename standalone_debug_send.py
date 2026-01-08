@@ -3,6 +3,8 @@
 Standalone debug script - no project imports required.
 Just sends a test DICOM and searches the database.
 
+VERSION: 6 - Lists all databases and tables, searches all columns
+
 Usage:
     python standalone_debug_send.py
 """
