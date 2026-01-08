@@ -28,7 +28,7 @@ import pydicom.uid
 
 from data_loader import load_dataset
 from dicom_sender import DicomSender
-from config import DicomEndpointConfig
+from config import DicomEndpointConfig, LoadProfileConfig
 from metrics import PerfMetrics
 
 
@@ -113,9 +113,11 @@ def main():
             temp_file = f.name
             ds.save_as(f.name)
         
-        sender = DicomSender(config)
+        load_profile = LoadProfileConfig()  # Use defaults
+        sender = DicomSender(config, load_profile)
         metrics = PerfMetrics()
-        sender._send_single_dataset(load_dataset(temp_file), metrics)
+        dataset = load_dataset(Path(temp_file))
+        sender._send_single_dataset(dataset, metrics)
         
         if metrics.successes > 0:
             print(f"  Status: SUCCESS")
