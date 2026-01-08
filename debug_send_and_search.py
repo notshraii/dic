@@ -12,10 +12,8 @@ Usage:
     python debug_send_and_search.py
 """
 
-import os
 import sys
 import time
-import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -26,7 +24,6 @@ load_dotenv(project_root / ".env")
 import pydicom
 import pydicom.uid
 
-from data_loader import load_dataset
 from dicom_sender import DicomSender
 from config import DicomEndpointConfig, LoadProfileConfig
 from metrics import PerfMetrics
@@ -105,19 +102,13 @@ def main():
     print(f"  PatientID: {ds.PatientID}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
     
-    # Save to temp file and send
+    # Send directly (no need to save to temp file)
     print(f"\n[SENDING TO COMPASS]")
-    temp_file = None
     try:
-        with tempfile.NamedTemporaryFile(suffix='.dcm', delete=False) as f:
-            temp_file = f.name
-            ds.save_as(f.name)
-        
         load_profile = LoadProfileConfig()  # Use defaults
         sender = DicomSender(config, load_profile)
         metrics = PerfMetrics()
-        dataset = load_dataset(Path(temp_file))
-        sender._send_single_dataset(dataset, metrics)
+        sender._send_single_dataset(ds, metrics)
         
         if metrics.successes > 0:
             print(f"  Status: SUCCESS")
@@ -126,9 +117,9 @@ def main():
             print(f"  Status: FAILED")
             print(f"  Errors: {metrics.failures}")
             
-    finally:
-        if temp_file and os.path.exists(temp_file):
-            os.unlink(temp_file)
+    except Exception as e:
+        print(f"  Status: ERROR")
+        print(f"  Exception: {e}")
     
     # Now search for it
     print(f"\n" + "=" * 70)
