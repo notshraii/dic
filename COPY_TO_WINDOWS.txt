@@ -8,6 +8,8 @@ Copy these 3 files to your Windows machine:
 2. dcmutl.py  
 3. build_windows.bat
 
+NOTE: You do NOT need build_exe.spec - the batch script uses command-line arguments instead.
+
 ================================================================================
 INSTRUCTIONS
 ================================================================================

@@ -8,6 +8,8 @@ To build the Windows executable, you only need to copy these files to your Windo
 2. **dcmutl.py** - Utility module (must be in same folder)
 3. **build_windows.bat** - Build script (optional, but makes it easier)
 
+**Note:** You do NOT need `build_exe.spec` - the batch script uses command-line arguments directly.
+
 ## Quick Build Steps on Windows
 
 ### Method 1: Using the batch script (Easiest)
