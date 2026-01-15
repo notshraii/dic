@@ -1,0 +1,34 @@
+================================================================================
+FILES TO COPY TO WINDOWS FOR BUILDING EXECUTABLE
+================================================================================
+
+Copy these 3 files to your Windows machine:
+
+1. update_dicom_tags.py
+2. dcmutl.py  
+3. build_windows.bat
+
+================================================================================
+INSTRUCTIONS
+================================================================================
+
+1. Copy the 3 files above to any folder on Windows
+   (e.g., C:\Users\YourName\Desktop\DICOMBuild)
+
+2. Double-click build_windows.bat
+
+3. Wait for build to complete (may take a few minutes)
+
+4. Find DICOMTagUpdater.exe in the dist\ folder
+
+That's it! The .exe file is standalone and can be run anywhere.
+
+================================================================================
+REQUIREMENTS ON WINDOWS
+================================================================================
+
+- Python 3.12 (or 3.11, 3.10) must be installed
+- Python must be added to PATH (check during installation)
+- Internet connection (for downloading PyInstaller and pydicom)
+
+================================================================================
