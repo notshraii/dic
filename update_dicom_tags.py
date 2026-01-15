@@ -693,7 +693,7 @@ class DICOMTagUpdaterGUI:
             if selected_tag:
                 try:
                     tag_tuple = datadict.tag_for_keyword(selected_tag)
-                    if tag_tuple:
+                    if tag_tuple and isinstance(tag_tuple, tuple) and len(tag_tuple) == 2:
                         group, element = tag_tuple
                         hex_val = f"({group:04X},{element:04X})"
                         hex_var.set(hex_val)
@@ -726,7 +726,7 @@ class DICOMTagUpdaterGUI:
             # Get display name for the tag
             try:
                 tag_tuple = datadict.tag_for_keyword(selected_tag)
-                if tag_tuple:
+                if tag_tuple and isinstance(tag_tuple, tuple) and len(tag_tuple) == 2:
                     group, element = tag_tuple
                     if not hex_val:
                         hex_val = f"({group:04X},{element:04X})"
@@ -736,6 +736,12 @@ class DICOMTagUpdaterGUI:
                     if not hex_val:
                         messagebox.showerror("Error", f"Could not find hex value for tag: {selected_tag}")
                         return
+            except (ValueError, TypeError) as e:
+                # Handle unpacking errors specifically
+                display_name = selected_tag
+                if not hex_val:
+                    messagebox.showerror("Error", f"Error processing tag: {selected_tag}. Could not determine hex value.")
+                    return
             except Exception as e:
                 display_name = selected_tag
                 if not hex_val:
