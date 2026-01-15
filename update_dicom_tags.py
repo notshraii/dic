@@ -645,7 +645,7 @@ class DICOMTagUpdaterGUI:
         # Create dialog to get tag info
         dialog = tk.Toplevel(self.root)
         dialog.title("Add New Tag")
-        dialog.geometry("500x250")
+        dialog.geometry("500x200")
         dialog.transient(self.root)
         dialog.grab_set()
         
@@ -679,31 +679,6 @@ class DICOMTagUpdaterGUI:
         tag_combo['values'] = available_tags[:500]  # Limit for performance
         tag_combo.pack(pady=5)
         
-        # Hex value display (read-only, auto-populated)
-        hex_var = tk.StringVar()
-        hex_label_frame = tk.Frame(dialog)
-        hex_label_frame.pack(pady=5)
-        tk.Label(hex_label_frame, text="Hex Value:").pack(side=tk.LEFT, padx=5)
-        hex_display = tk.Entry(hex_label_frame, textvariable=hex_var, width=20, state="readonly")
-        hex_display.pack(side=tk.LEFT)
-        
-        # Update hex value when tag is selected
-        def update_hex_value(event=None):
-            selected_tag = tag_var.get()
-            if selected_tag:
-                try:
-                    tag_tuple = datadict.tag_for_keyword(selected_tag)
-                    if tag_tuple and isinstance(tag_tuple, tuple) and len(tag_tuple) == 2:
-                        group, element = tag_tuple
-                        hex_val = f"({group:04X},{element:04X})"
-                        hex_var.set(hex_val)
-                    else:
-                        hex_var.set("")
-                except Exception:
-                    hex_var.set("")
-        
-        tag_combo.bind('<<ComboboxSelected>>', update_hex_value)
-        
         # Tag value entry
         tk.Label(dialog, text="Tag Value:").pack(pady=5)
         value_entry = tk.Entry(dialog, width=50)
@@ -712,7 +687,6 @@ class DICOMTagUpdaterGUI:
         
         def add_tag():
             selected_tag = tag_var.get().strip()
-            hex_val = hex_var.get().strip()
             value = value_entry.get().strip()
             
             if not selected_tag:
@@ -723,30 +697,26 @@ class DICOMTagUpdaterGUI:
                 messagebox.showwarning("Warning", "Please enter a tag value.")
                 return
             
-            # Get display name for the tag
+            # Get hex value and display name for the tag
+            hex_val = None
+            display_name = selected_tag.replace('_', ' ').title()
+            
             try:
                 tag_tuple = datadict.tag_for_keyword(selected_tag)
                 if tag_tuple and isinstance(tag_tuple, tuple) and len(tag_tuple) == 2:
                     group, element = tag_tuple
-                    if not hex_val:
-                        hex_val = f"({group:04X},{element:04X})"
-                    display_name = selected_tag.replace('_', ' ').title()
+                    hex_val = f"({group:04X},{element:04X})"
                 else:
-                    display_name = selected_tag
-                    if not hex_val:
-                        messagebox.showerror("Error", f"Could not find hex value for tag: {selected_tag}")
-                        return
-            except (ValueError, TypeError) as e:
-                # Handle unpacking errors specifically
-                display_name = selected_tag
-                if not hex_val:
-                    messagebox.showerror("Error", f"Error processing tag: {selected_tag}. Could not determine hex value.")
-                    return
-            except Exception as e:
-                display_name = selected_tag
-                if not hex_val:
-                    messagebox.showerror("Error", f"Error processing tag: {e}")
-                    return
+                    # Tag not found in standard dictionary, use tag name as identifier
+                    # Hex value will be None, we'll use the keyword directly
+                    hex_val = None
+            except (ValueError, TypeError, Exception):
+                # If we can't get the hex value, that's okay - we'll use the keyword
+                hex_val = None
+            
+            # If we couldn't determine hex value, use the tag keyword directly
+            if not hex_val:
+                hex_val = selected_tag
             
             # Find tags_frame to add the new tag
             tags_frame = None
@@ -773,7 +743,11 @@ class DICOMTagUpdaterGUI:
                 else:
                     row_frame.pack(fill=tk.X, pady=2)
                 
-                label_text = f"{display_name} {hex_val}:"
+                # Format label - include hex value if available, otherwise just tag name
+                if hex_val and hex_val != selected_tag and hex_val.startswith('('):
+                    label_text = f"{display_name} {hex_val}:"
+                else:
+                    label_text = f"{display_name}:"
                 label = tk.Label(row_frame, text=label_text, width=35, anchor="w")
                 label.pack(side=tk.LEFT, padx=(0, 5))
                 
@@ -787,10 +761,12 @@ class DICOMTagUpdaterGUI:
                 remove_btn.pack(side=tk.LEFT)
                 
                 # Store widget references
+                # Use hex_val if available, otherwise use selected_tag as identifier
+                hex_display = hex_val if (hex_val and hex_val.startswith('(')) else selected_tag
                 self.tag_widgets[tag_key] = {
                     'frame': row_frame,
                     'title': display_name,
-                    'hex': hex_val,
+                    'hex': hex_display,
                     'value_var': value_var,
                     'keyword': selected_tag
                 }
