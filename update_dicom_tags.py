@@ -315,7 +315,8 @@ def update_dicom_file(
 def verify_changes(
     file_path: str,
     original_values: Dict[str, Optional[str]],
-    new_values: Dict[str, Optional[str]]
+    new_values: Dict[str, Optional[str]],
+    custom_tags: Optional[Dict[str, str]] = None
 ) -> Tuple[bool, str]:
     """
     Verify that the changes were applied correctly and values are valid.
@@ -377,67 +378,111 @@ def verify_changes(
         else:
             verification_errors.append("SeriesInstanceUID tag missing after update")
         
-        # Verify other test tags using hex tag values directly
-        print("    Verifying test data tags (using hex tag values)...")
+        # Verify other test tags using values from custom_tags or defaults
+        print("    Verifying tag values...")
+        
+        # Default expected values (used if custom_tags not provided)
+        default_expected = {
+            'PatientID': '11043207',
+            'PatientName': 'ZZTESTPATIENT^MIDIA THREE',
+            'PatientBirthDate': '19010101',
+            'InstitutionName': 'TEST FACILITY',
+            'ReferringPhysicianName': 'TEST PROVIDER'
+        }
+        
+        # Use custom_tags if provided, otherwise use defaults
+        expected_values = custom_tags if custom_tags else default_expected
         
         # PatientID - (0010,0020)
-        if (0x0010, 0x0020) in ds:
-            current_value = str(ds[0x0010, 0x0020].value)
-            if current_value != '11043207':
-                verification_errors.append(f"PatientID (0010,0020) mismatch: expected '11043207', got '{current_value}'")
+        if 'PatientID' in expected_values:
+            if (0x0010, 0x0020) in ds:
+                current_value = str(ds[0x0010, 0x0020].value)
+                expected_value = expected_values['PatientID']
+                if current_value != expected_value:
+                    verification_errors.append(f"PatientID (0010,0020) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      PatientID (0010,0020) verified: {current_value}")
             else:
-                print(f"      PatientID (0010,0020) verified: {current_value}")
-        else:
-            verification_errors.append("PatientID (0010,0020) tag missing after update")
+                verification_errors.append("PatientID (0010,0020) tag missing after update")
         
         # PatientName - (0010,0010)
-        if (0x0010, 0x0010) in ds:
-            current_value = str(ds[0x0010, 0x0010].value)
-            if current_value != 'ZZTESTPATIENT^MIDIA THREE':
-                verification_errors.append(f"PatientName (0010,0010) mismatch: expected 'ZZTESTPATIENT^MIDIA THREE', got '{current_value}'")
+        if 'PatientName' in expected_values:
+            if (0x0010, 0x0010) in ds:
+                current_value = str(ds[0x0010, 0x0010].value)
+                expected_value = expected_values['PatientName']
+                if current_value != expected_value:
+                    verification_errors.append(f"PatientName (0010,0010) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      PatientName (0010,0010) verified: {current_value}")
             else:
-                print(f"      PatientName (0010,0010) verified: {current_value}")
-        else:
-            verification_errors.append("PatientName (0010,0010) tag missing after update")
+                verification_errors.append("PatientName (0010,0010) tag missing after update")
         
         # PatientBirthDate - (0010,0030)
-        if (0x0010, 0x0030) in ds:
-            current_value = str(ds[0x0010, 0x0030].value)
-            if current_value != '19010101':
-                verification_errors.append(f"PatientBirthDate (0010,0030) mismatch: expected '19010101', got '{current_value}'")
+        if 'PatientBirthDate' in expected_values:
+            if (0x0010, 0x0030) in ds:
+                current_value = str(ds[0x0010, 0x0030].value)
+                expected_value = expected_values['PatientBirthDate']
+                if current_value != expected_value:
+                    verification_errors.append(f"PatientBirthDate (0010,0030) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      PatientBirthDate (0010,0030) verified: {current_value}")
             else:
-                print(f"      PatientBirthDate (0010,0030) verified: {current_value}")
-        else:
-            verification_errors.append("PatientBirthDate (0010,0030) tag missing after update")
+                verification_errors.append("PatientBirthDate (0010,0030) tag missing after update")
         
         # InstitutionName - (0008,0080)
-        if (0x0008, 0x0080) in ds:
-            current_value = str(ds[0x0008, 0x0080].value)
-            if current_value != 'TEST FACILITY':
-                verification_errors.append(f"InstitutionName (0008,0080) mismatch: expected 'TEST FACILITY', got '{current_value}'")
+        if 'InstitutionName' in expected_values:
+            if (0x0008, 0x0080) in ds:
+                current_value = str(ds[0x0008, 0x0080].value)
+                expected_value = expected_values['InstitutionName']
+                if current_value != expected_value:
+                    verification_errors.append(f"InstitutionName (0008,0080) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      InstitutionName (0008,0080) verified: {current_value}")
             else:
-                print(f"      InstitutionName (0008,0080) verified: {current_value}")
-        else:
-            verification_errors.append("InstitutionName (0008,0080) tag missing after update")
+                verification_errors.append("InstitutionName (0008,0080) tag missing after update")
         
-        # ReferringPhysicianName - Try (0008,0090) first, then (0808,0090)
-        referring_physician_verified = False
-        if (0x0008, 0x0090) in ds:
-            current_value = str(ds[0x0008, 0x0090].value)
-            if current_value != 'TEST PROVIDER':
-                verification_errors.append(f"ReferringPhysicianName (0008,0090) mismatch: expected 'TEST PROVIDER', got '{current_value}'")
-            else:
-                print(f"      ReferringPhysicianName (0008,0090) verified: {current_value}")
-                referring_physician_verified = True
-        elif (0x0808, 0x0090) in ds:
-            current_value = str(ds[0x0808, 0x0090].value)
-            if current_value != 'TEST PROVIDER':
-                verification_errors.append(f"ReferringPhysicianName (0808,0090) mismatch: expected 'TEST PROVIDER', got '{current_value}'")
-            else:
-                print(f"      ReferringPhysicianName (0808,0090) verified: {current_value}")
-                referring_physician_verified = True
-        else:
-            verification_errors.append("ReferringPhysicianName (0008,0090 or 0808,0090) tag missing after update")
+        # ReferringPhysicianName - Check both (0008,0090) and (0808,0090)
+        if 'ReferringPhysicianName' in expected_values:
+            referring_physician_verified = False
+            expected_value = expected_values['ReferringPhysicianName']
+            
+            if (0x0008, 0x0090) in ds:
+                current_value = str(ds[0x0008, 0x0090].value)
+                if current_value != expected_value:
+                    verification_errors.append(f"ReferringPhysicianName (0008,0090) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      ReferringPhysicianName (0008,0090) verified: {current_value}")
+                    referring_physician_verified = True
+            elif (0x0808, 0x0090) in ds:
+                current_value = str(ds[0x0808, 0x0090].value)
+                if current_value != expected_value:
+                    verification_errors.append(f"ReferringPhysicianName (0808,0090) mismatch: expected '{expected_value}', got '{current_value}'")
+                else:
+                    print(f"      ReferringPhysicianName (0808,0090) verified: {current_value}")
+                    referring_physician_verified = True
+            
+            if not referring_physician_verified:
+                verification_errors.append("ReferringPhysicianName (0008,0090 or 0808,0090) tag missing after update")
+        
+        # Verify custom tags (tags added via "Add tag" button)
+        if custom_tags:
+            for tag_identifier, expected_value in custom_tags.items():
+                # Skip default tags we already handled
+                if tag_identifier in ['PatientID', 'PatientName', 'PatientBirthDate', 'InstitutionName', 'ReferringPhysicianName']:
+                    continue
+                
+                # Try to verify using keyword
+                try:
+                    if hasattr(ds, tag_identifier):
+                        current_value = str(getattr(ds, tag_identifier))
+                        if current_value != expected_value:
+                            verification_errors.append(f"{tag_identifier} mismatch: expected '{expected_value}', got '{current_value}'")
+                        else:
+                            print(f"      {tag_identifier} verified: {current_value}")
+                    else:
+                        verification_errors.append(f"{tag_identifier} tag missing after update")
+                except Exception as e:
+                    verification_errors.append(f"Error verifying {tag_identifier}: {e}")
         
         if verification_errors:
             return False, "; ".join(verification_errors)
@@ -547,7 +592,8 @@ def process_folder(
             verify_success, verify_message = verify_changes(
                 dcm_file,
                 original_values,
-                new_values
+                new_values,
+                custom_tags=custom_tags
             )
             
             if not verify_success:
@@ -968,7 +1014,8 @@ class DICOMTagUpdaterGUI:
                         verify_success, verify_message = verify_changes(
                             path,
                             original_values,
-                            new_values
+                            new_values,
+                            custom_tags=tag_values
                         )
                         if not verify_success:
                             self.log_output(f"VERIFICATION FAILED: {verify_message}\n")
