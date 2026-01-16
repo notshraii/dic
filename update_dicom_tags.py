@@ -850,21 +850,34 @@ class DICOMTagUpdaterGUI:
         # Redirect stdout to capture output
         import io
         old_stdout = sys.stdout
-        sys.stdout = io.StringIO()
+        output_buffer = io.StringIO()
+        sys.stdout = output_buffer
         
         try:
             # Process the folder/file
             if os.path.isfile(path):
                 # Single file - process just this file
                 try:
+                    # Log file being processed
+                    self.log_output(f"Processing file: {os.path.basename(path)}\n")
+                    self.log_output(f"Full path: {path}\n\n")
+                    
                     success, message, original_values, new_values = update_dicom_file(
                         path,
                         dry_run=False,
                         verbose=True
                     )
                     
+                    # Get captured output
+                    output = output_buffer.getvalue()
+                    if output:
+                        self.log_output(output)
+                    # Clear buffer for next operation
+                    output_buffer.seek(0)
+                    output_buffer.truncate(0)
+                    
                     if not success:
-                        self.log_output(f"Error: {message}\n")
+                        self.log_output(f"ERROR: {message}\n")
                         self.status_var.set("Error occurred")
                         messagebox.showerror("Error", f"Error processing file: {message}")
                     else:
@@ -875,9 +888,10 @@ class DICOMTagUpdaterGUI:
                             new_values
                         )
                         if not verify_success:
-                            self.log_output(f"Verification failed: {verify_message}\n")
+                            self.log_output(f"VERIFICATION FAILED: {verify_message}\n")
                             self.status_var.set("Verification failed")
                         else:
+                            self.log_output("Verification passed: All tags updated correctly\n")
                             self.status_var.set("Processing completed successfully")
                             messagebox.showinfo("Success", "File processed successfully.")
                 except InvalidDicomError:
@@ -894,8 +908,9 @@ class DICOMTagUpdaterGUI:
                 )
                 
                 # Get captured output
-                output = sys.stdout.getvalue()
-                self.log_output(output)
+                output = output_buffer.getvalue()
+                if output:
+                    self.log_output(output)
                 
                 # Show summary
                 summary = f"\n{'='*60}\nSUMMARY\n{'='*60}\n"
