@@ -130,7 +130,8 @@ def get_original_values(ds) -> Dict[str, Optional[str]]:
 def update_dicom_file(
     file_path: str,
     dry_run: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    custom_tags: Optional[Dict[str, str]] = None
 ) -> Tuple[bool, str, Dict[str, Optional[str]], Dict[str, Optional[str]]]:
     """
     Update DICOM tags in a single file.
@@ -183,81 +184,114 @@ def update_dicom_file(
             update_tags_ds(ds, "SeriesInstanceUID", new_series_uid)
             print("    Unique identifier tags updated")
             
-            # Update other test tags using direct hex tag assignment
-            print("  Step 4: Updating test data tags (using hex tag values)...")
+            # Update other test tags using values from GUI or defaults
+            print("  Step 4: Updating tag values...")
+            
+            # Default values (used if custom_tags not provided)
+            default_tag_values = {
+                'PatientID': "11043207",
+                'PatientName': "ZZTESTPATIENT^MIDIA THREE",
+                'PatientBirthDate': "19010101",
+                'InstitutionName': "TEST FACILITY",
+                'ReferringPhysicianName': "TEST PROVIDER"
+            }
+            
+            # Use custom tags if provided, otherwise use defaults
+            tag_values = custom_tags if custom_tags else default_tag_values
             
             # PatientID - (0010,0020) LO (Long String)
-            old_patient_id = None
-            if (0x0010, 0x0020) in ds:
-                old_patient_id = str(ds[0x0010, 0x0020].value)
-            if (0x0010, 0x0020) not in ds:
-                ds.add_new((0x0010, 0x0020), 'LO', "11043207")
-            else:
-                ds[0x0010, 0x0020].value = "11043207"
-            print(f"    PatientID (0010,0020) updated: {old_patient_id} to 11043207")
+            if 'PatientID' in tag_values:
+                old_patient_id = None
+                if (0x0010, 0x0020) in ds:
+                    old_patient_id = str(ds[0x0010, 0x0020].value)
+                if (0x0010, 0x0020) not in ds:
+                    ds.add_new((0x0010, 0x0020), 'LO', tag_values['PatientID'])
+                else:
+                    ds[0x0010, 0x0020].value = tag_values['PatientID']
+                print(f"    PatientID (0010,0020) updated: {old_patient_id} to {tag_values['PatientID']}")
             
             # PatientName - (0010,0010) PN (Person Name)
-            old_patient_name = None
-            if (0x0010, 0x0010) in ds:
-                old_patient_name = str(ds[0x0010, 0x0010].value)
-            if (0x0010, 0x0010) not in ds:
-                ds.add_new((0x0010, 0x0010), 'PN', "ZZTESTPATIENT^MIDIA THREE")
-            else:
-                ds[0x0010, 0x0010].value = "ZZTESTPATIENT^MIDIA THREE"
-            print(f"    PatientName (0010,0010) updated: {old_patient_name} to ZZTESTPATIENT^MIDIA THREE")
+            if 'PatientName' in tag_values:
+                old_patient_name = None
+                if (0x0010, 0x0010) in ds:
+                    old_patient_name = str(ds[0x0010, 0x0010].value)
+                if (0x0010, 0x0010) not in ds:
+                    ds.add_new((0x0010, 0x0010), 'PN', tag_values['PatientName'])
+                else:
+                    ds[0x0010, 0x0010].value = tag_values['PatientName']
+                print(f"    PatientName (0010,0010) updated: {old_patient_name} to {tag_values['PatientName']}")
             
             # PatientBirthDate - (0010,0030) DA (Date)
-            old_birth_date = None
-            if (0x0010, 0x0030) in ds:
-                old_birth_date = str(ds[0x0010, 0x0030].value)
-            if (0x0010, 0x0030) not in ds:
-                ds.add_new((0x0010, 0x0030), 'DA', "19010101")
-            else:
-                ds[0x0010, 0x0030].value = "19010101"
-            print(f"    PatientBirthDate (0010,0030) updated: {old_birth_date} to 19010101")
+            if 'PatientBirthDate' in tag_values:
+                old_birth_date = None
+                if (0x0010, 0x0030) in ds:
+                    old_birth_date = str(ds[0x0010, 0x0030].value)
+                if (0x0010, 0x0030) not in ds:
+                    ds.add_new((0x0010, 0x0030), 'DA', tag_values['PatientBirthDate'])
+                else:
+                    ds[0x0010, 0x0030].value = tag_values['PatientBirthDate']
+                print(f"    PatientBirthDate (0010,0030) updated: {old_birth_date} to {tag_values['PatientBirthDate']}")
             
             # InstitutionName - (0008,0080) LO (Long String)
-            old_institution = None
-            if (0x0008, 0x0080) in ds:
-                old_institution = str(ds[0x0008, 0x0080].value)
-            if (0x0008, 0x0080) not in ds:
-                ds.add_new((0x0008, 0x0080), 'LO', "TEST FACILITY")
-            else:
-                ds[0x0008, 0x0080].value = "TEST FACILITY"
-            print(f"    InstitutionName (0008,0080) updated: {old_institution} to TEST FACILITY")
+            if 'InstitutionName' in tag_values:
+                old_institution = None
+                if (0x0008, 0x0080) in ds:
+                    old_institution = str(ds[0x0008, 0x0080].value)
+                if (0x0008, 0x0080) not in ds:
+                    ds.add_new((0x0008, 0x0080), 'LO', tag_values['InstitutionName'])
+                else:
+                    ds[0x0008, 0x0080].value = tag_values['InstitutionName']
+                print(f"    InstitutionName (0008,0080) updated: {old_institution} to {tag_values['InstitutionName']}")
             
             # ReferringPhysicianName - Try (0008,0090) first, fallback to (0808,0090)
-            old_referring_physician = None
-            referring_physician_set = False
-            
-            # Try standard tag (0008,0090) first
-            try:
-                if (0x0008, 0x0090) in ds:
-                    old_referring_physician = str(ds[0x0008, 0x0090].value)
-                    ds[0x0008, 0x0090].value = "TEST PROVIDER"
-                    referring_physician_set = True
-                    print(f"    ReferringPhysicianName (0008,0090) updated: {old_referring_physician} to TEST PROVIDER")
-                else:
-                    ds.add_new((0x0008, 0x0090), 'PN', "TEST PROVIDER")
-                    referring_physician_set = True
-                    print("    ReferringPhysicianName (0008,0090) added: TEST PROVIDER")
-            except Exception as e:
-                print(f"    Warning: Could not set ReferringPhysicianName (0008,0090): {e}")
-            
-            # Fallback to private tag (0808,0090) if standard tag failed
-            if not referring_physician_set:
+            if 'ReferringPhysicianName' in tag_values:
+                old_referring_physician = None
+                referring_physician_set = False
+                
+                # Try standard tag (0008,0090) first
                 try:
-                    if (0x0808, 0x0090) in ds:
-                        old_referring_physician = str(ds[0x0808, 0x0090].value)
-                        ds[0x0808, 0x0090].value = "TEST PROVIDER"
+                    if (0x0008, 0x0090) in ds:
+                        old_referring_physician = str(ds[0x0008, 0x0090].value)
+                        ds[0x0008, 0x0090].value = tag_values['ReferringPhysicianName']
                         referring_physician_set = True
-                        print(f"    ReferringPhysicianName (0808,0090) updated: {old_referring_physician} to TEST PROVIDER")
+                        print(f"    ReferringPhysicianName (0008,0090) updated: {old_referring_physician} to {tag_values['ReferringPhysicianName']}")
                     else:
-                        ds.add_new((0x0808, 0x0090), 'PN', "TEST PROVIDER")
+                        ds.add_new((0x0008, 0x0090), 'PN', tag_values['ReferringPhysicianName'])
                         referring_physician_set = True
-                        print("    ReferringPhysicianName (0808,0090) added: TEST PROVIDER")
+                        print(f"    ReferringPhysicianName (0008,0090) added: {tag_values['ReferringPhysicianName']}")
                 except Exception as e:
-                    print(f"    Warning: Could not set ReferringPhysicianName (0808,0090): {e}")
+                    print(f"    Warning: Could not set ReferringPhysicianName (0008,0090): {e}")
+                
+                # Fallback to private tag (0808,0090) if standard tag failed
+                if not referring_physician_set:
+                    try:
+                        if (0x0808, 0x0090) in ds:
+                            old_referring_physician = str(ds[0x0808, 0x0090].value)
+                            ds[0x0808, 0x0090].value = tag_values['ReferringPhysicianName']
+                            referring_physician_set = True
+                            print(f"    ReferringPhysicianName (0808,0090) updated: {old_referring_physician} to {tag_values['ReferringPhysicianName']}")
+                        else:
+                            ds.add_new((0x0808, 0x0090), 'PN', tag_values['ReferringPhysicianName'])
+                            referring_physician_set = True
+                            print(f"    ReferringPhysicianName (0808,0090) added: {tag_values['ReferringPhysicianName']}")
+                    except Exception as e:
+                        print(f"    Warning: Could not set ReferringPhysicianName (0808,0090): {e}")
+            
+            # Update custom tags (tags added via "Add tag" button)
+            # Custom tags are passed as a dict with tag identifiers as keys
+            # We need to handle both keyword-based and hex-based tags
+            if custom_tags:
+                for tag_identifier, tag_value in custom_tags.items():
+                    # Skip default tags we already handled
+                    if tag_identifier in ['PatientID', 'PatientName', 'PatientBirthDate', 'InstitutionName', 'ReferringPhysicianName']:
+                        continue
+                    
+                    # Try to update using the tag identifier (could be keyword or hex)
+                    try:
+                        update_tags_ds(ds, tag_identifier, tag_value)
+                        print(f"    {tag_identifier} updated: {tag_value}")
+                    except Exception as e:
+                        print(f"    Warning: Could not update {tag_identifier}: {e}")
             
             # Save the file
             print("  Step 5: Saving updated DICOM file...")
@@ -417,7 +451,8 @@ def verify_changes(
 def process_folder(
     folder_path: str,
     dry_run: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    custom_tags: Optional[Dict[str, str]] = None
 ) -> Dict[str, int]:
     """
     Process all DICOM files in a folder.
@@ -494,7 +529,8 @@ def process_folder(
         success, message, original_values, new_values = update_dicom_file(
             dcm_file,
             dry_run=dry_run,
-            verbose=verbose
+            verbose=verbose,
+            custom_tags=custom_tags
         )
         
         if not success:
@@ -868,6 +904,27 @@ class DICOMTagUpdaterGUI:
             messagebox.showerror("Error", f"Path does not exist: {path}")
             return
         
+        # Collect tag values from GUI
+        tag_values = {}
+        
+        # Get default tag values
+        for tag_key, widget_info in self.tag_widgets.items():
+            if tag_key in self.default_tags:
+                value = widget_info['value_var'].get().strip()
+                if value:
+                    tag_values[tag_key] = value
+        
+        # Get custom tag values
+        for tag_key in self.custom_tags:
+            if tag_key in self.tag_widgets:
+                widget_info = self.tag_widgets[tag_key]
+                value = widget_info['value_var'].get().strip()
+                keyword = widget_info.get('keyword')
+                if value:
+                    # Use keyword if available, otherwise use the tag key
+                    tag_identifier = keyword if keyword else tag_key
+                    tag_values[tag_identifier] = value
+        
         # Clear output
         self.output_text.delete(1.0, tk.END)
         self.status_var.set("Processing...")
@@ -890,7 +947,8 @@ class DICOMTagUpdaterGUI:
                     success, message, original_values, new_values = update_dicom_file(
                         path,
                         dry_run=False,
-                        verbose=True
+                        verbose=True,
+                        custom_tags=tag_values
                     )
                     
                     # Get captured output
@@ -929,7 +987,8 @@ class DICOMTagUpdaterGUI:
                 stats = process_folder(
                     folder_path,
                     dry_run=False,
-                    verbose=True
+                    verbose=True,
+                    custom_tags=tag_values
                 )
                 
                 # Get captured output
