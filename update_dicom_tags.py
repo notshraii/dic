@@ -261,7 +261,13 @@ def update_dicom_file(
             
             # Save the file
             print("  Step 5: Saving updated DICOM file...")
-            ds.save_as(file_path, write_like_original=False)
+            # Use enforce_file_format instead of deprecated write_like_original
+            try:
+                # Try with enforce_file_format (pydicom 2.0+)
+                ds.save_as(file_path, enforce_file_format=False)
+            except TypeError:
+                # Fallback for older pydicom versions
+                ds.save_as(file_path, write_like_original=False)
             print("    File saved successfully")
         
         return True, "Success", original_values, new_values
@@ -676,8 +682,27 @@ class DICOMTagUpdaterGUI:
         except Exception:
             available_tags = ['PatientID', 'PatientName', 'StudyInstanceUID', 'SeriesInstanceUID', 'SOPInstanceUID']
         
-        tag_combo['values'] = available_tags[:500]  # Limit for performance
+        # Store all tags for filtering (use closure to access available_tags)
+        all_tags_list = available_tags
+        
+        # Set all tags in combobox (no limit)
+        tag_combo['values'] = available_tags
         tag_combo.pack(pady=5)
+        
+        # Make combobox searchable by filtering as user types
+        def filter_tags(event=None):
+            value = tag_var.get().lower()
+            if value:
+                # Filter tags that contain the typed text
+                filtered = [tag for tag in all_tags_list if value in tag.lower()]
+                # Limit to 1000 results for performance when displaying dropdown
+                tag_combo['values'] = filtered[:1000] if len(filtered) > 1000 else filtered
+            else:
+                # Show all tags when field is empty
+                tag_combo['values'] = all_tags_list
+        
+        # Bind key release to filter
+        tag_combo.bind('<KeyRelease>', filter_tags)
         
         # Tag value entry
         tk.Label(dialog, text="Tag Value:").pack(pady=5)
