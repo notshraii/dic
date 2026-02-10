@@ -32,6 +32,7 @@ def test_load_stability_3x_peak(
     )
 
     snapshot = metrics.snapshot()
+    print("Load stability snapshot:", snapshot)
 
     assert total_sent > 0, "No messages were sent during load test"
     assert metrics.total == total_sent, "Mismatch total_sent vs metrics.total"
@@ -48,6 +49,4 @@ def test_load_stability_3x_peak(
     assert (
         p95 is not None and p95 <= max_p95_latency
     ), f"p95 latency too high: {p95} ms > {max_p95_latency} ms"
-
-    print("Load stability snapshot:", snapshot)
 
