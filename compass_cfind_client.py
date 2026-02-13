@@ -119,6 +119,7 @@ class CompassCFindClient:
                         logger.info(f"C-FIND completed successfully, found {len(results)} matches")
                     else:
                         logger.warning(f"C-FIND status: 0x{status.Status:04X}")
+                        raise RuntimeError(f"C-FIND failed with status 0x{status.Status:04X}")
                 else:
                     logger.error("Connection timed out or was aborted")
                     break
@@ -305,19 +306,53 @@ class CompassCFindClient:
             True if connection successful, False otherwise
         """
         try:
-            # Simple query - try to find any study from today
             today = datetime.now().strftime("%Y%m%d")
-            ds = Dataset()
-            ds.QueryRetrieveLevel = "STUDY"
-            ds.PatientID = "*"
-            ds.StudyDate = today
-            ds.StudyInstanceUID = ""
-            
-            logger.info("Testing C-FIND connection...")
-            results = self._execute_find(ds)
-            logger.info(f"Connection test successful (found {len(results)} studies today)")
-            return True
-            
+
+            # Try multiple query strategies — some servers are picky
+            strategies = [
+                {
+                    'name': 'Patient Root + PatientID wildcard',
+                    'model': 'PATIENT',
+                    'attrs': {'QueryRetrieveLevel': 'STUDY', 'PatientID': '*', 'StudyDate': today, 'StudyInstanceUID': ''},
+                },
+                {
+                    'name': 'Study Root minimal (date only)',
+                    'model': 'STUDY',
+                    'attrs': {'QueryRetrieveLevel': 'STUDY', 'StudyDate': today, 'StudyInstanceUID': ''},
+                },
+                {
+                    'name': 'Study Root with PatientID wildcard',
+                    'model': 'STUDY',
+                    'attrs': {'QueryRetrieveLevel': 'STUDY', 'PatientID': '*', 'StudyDate': today, 'StudyInstanceUID': ''},
+                },
+                {
+                    'name': 'Patient Root minimal',
+                    'model': 'PATIENT',
+                    'attrs': {'QueryRetrieveLevel': 'STUDY', 'PatientID': '*', 'StudyInstanceUID': ''},
+                },
+            ]
+
+            for strategy in strategies:
+                logger.info(f"Trying: {strategy['name']}...")
+                ds = Dataset()
+                for attr, val in strategy['attrs'].items():
+                    setattr(ds, attr, val)
+
+                # Temporarily override query model
+                original_model = self.config.query_model
+                self.config.query_model = strategy['model']
+                try:
+                    results = self._execute_find(ds)
+                    logger.info(f"SUCCESS with '{strategy['name']}' (found {len(results)} studies)")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Failed with '{strategy['name']}': {e}")
+                finally:
+                    self.config.query_model = original_model
+
+            logger.error("All C-FIND strategies failed")
+            return False
+
         except Exception as e:
             logger.error(f"Connection test failed: {e}")
             return False
