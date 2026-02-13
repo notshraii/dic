@@ -139,28 +139,19 @@ class CompassCFindClient:
         Returns:
             DICOM dataset with study information, or None if not found
         """
-        # Create query dataset
+        # Minimal query — only request fields Compass is known to support
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
         ds.StudyInstanceUID = study_uid
-
-        # Request all available study-level attributes
-        # PatientID with wildcard is required by some DICOM servers
-        ds.PatientName = ""
         ds.PatientID = "*"
-        ds.PatientBirthDate = ""
-        ds.PatientSex = ""
+        ds.PatientName = ""
         ds.StudyDate = ""
-        ds.StudyTime = ""
         ds.AccessionNumber = ""
         ds.StudyDescription = ""
-        ds.ModalitiesInStudy = ""
-        ds.NumberOfStudyRelatedSeries = ""
-        ds.NumberOfStudyRelatedInstances = ""
-        
+
         logger.info(f"Querying for study: {study_uid}")
         results = self._execute_find(ds)
-        
+
         return results[0] if results else None
     
     def find_studies_by_patient_id(
@@ -181,21 +172,12 @@ class CompassCFindClient:
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
         ds.PatientID = patient_id
-        
-        if study_date:
-            ds.StudyDate = study_date
-        else:
-            ds.StudyDate = ""
-        
-        # Request study attributes
+        ds.StudyDate = study_date if study_date else ""
         ds.StudyInstanceUID = ""
         ds.PatientName = ""
-        ds.StudyTime = ""
         ds.AccessionNumber = ""
         ds.StudyDescription = ""
-        ds.ModalitiesInStudy = ""
-        ds.NumberOfStudyRelatedInstances = ""
-        
+
         logger.info(f"Querying for patient: {patient_id}")
         return self._execute_find(ds)
     
@@ -212,16 +194,11 @@ class CompassCFindClient:
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
         ds.AccessionNumber = accession_number
-        
-        # Request study attributes
-        ds.StudyInstanceUID = ""
         ds.PatientID = "*"
+        ds.StudyInstanceUID = ""
         ds.PatientName = ""
         ds.StudyDate = ""
-        ds.StudyTime = ""
         ds.StudyDescription = ""
-        ds.ModalitiesInStudy = ""
-        ds.NumberOfStudyRelatedInstances = ""
 
         logger.info(f"Querying for accession: {accession_number}")
         return self._execute_find(ds)
@@ -243,22 +220,13 @@ class CompassCFindClient:
         """
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
-        
-        if end_date:
-            ds.StudyDate = f"{start_date}-{end_date}"
-        else:
-            ds.StudyDate = start_date
-
-        # Request study attributes
-        ds.StudyInstanceUID = ""
+        ds.StudyDate = f"{start_date}-{end_date}" if end_date else start_date
         ds.PatientID = "*"
+        ds.StudyInstanceUID = ""
         ds.PatientName = ""
-        ds.StudyTime = ""
         ds.AccessionNumber = ""
         ds.StudyDescription = ""
-        ds.ModalitiesInStudy = ""
-        ds.NumberOfStudyRelatedInstances = ""
-        
+
         logger.info(f"Querying for date range: {ds.StudyDate}")
         return self._execute_find(ds)
     
@@ -280,20 +248,12 @@ class CompassCFindClient:
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
         ds.ModalitiesInStudy = modality
-        
-        if study_date:
-            ds.StudyDate = study_date
-        else:
-            ds.StudyDate = ""
-        
-        # Request study attributes
-        ds.StudyInstanceUID = ""
+        ds.StudyDate = study_date if study_date else ""
         ds.PatientID = "*"
+        ds.StudyInstanceUID = ""
         ds.PatientName = ""
-        ds.StudyTime = ""
         ds.AccessionNumber = ""
         ds.StudyDescription = ""
-        ds.NumberOfStudyRelatedInstances = ""
 
         logger.info(f"Querying for modality: {modality}")
         return self._execute_find(ds)
