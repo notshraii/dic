@@ -11,6 +11,7 @@ from pydicom.uid import generate_uid
 
 from data_loader import load_dataset
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 # ============================================================================
@@ -54,7 +55,9 @@ def test_called_aet_routing(
     test_case: dict,
     single_dicom_file,
     dicom_sender,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Test that Compass accepts and correctly routes studies to different called AE Titles.
@@ -127,14 +130,13 @@ def test_called_aet_routing(
         print(f"  Status: SUCCESS")
         print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
 
-        # Verification instructions
-        print(f"\n[MANUAL VERIFICATION]")
-        print(f"  1. Query Compass for StudyInstanceUID: {test_study_uid}")
-        print(f"  2. Verify called AE Title is: {called_aet}")
-        print(f"  3. Verify study was routed/processed correctly for this destination")
-        print(f"  4. Verify StudyDescription contains: {study_desc}")
+        # C-FIND verification
+        print(f"\n[C-FIND VERIFICATION]")
+        study = verify_study_arrived(cfind_client, test_study_uid, perf_config)
+        if study:
+            print(f"  [OK] Study confirmed in Compass for called AET: {called_aet}")
 
-        print(f"\n[RESULT: SEND SUCCESSFUL - MANUAL VERIFICATION PENDING]")
+        print(f"\n[RESULT: SEND AND VERIFICATION SUCCESSFUL]")
 
     finally:
         # Restore original AE title
@@ -181,6 +183,8 @@ def test_all_called_aets_summary():
 def test_multiple_aets_batch_send(
     small_dicom_files,
     dicom_sender,
+    cfind_client,
+    perf_config,
 ):
     """
     Advanced test: Send multiple files to multiple different called AETs.
@@ -269,6 +273,16 @@ def test_multiple_aets_batch_send(
 
         print(f"\n[SUCCESS: All {len(results)} sends completed successfully]")
 
+        # C-FIND verification: verify first UID per AET
+        print(f"\n[C-FIND VERIFICATION]")
+        verified_aets = set()
+        for r in results:
+            if r['called_aet'] not in verified_aets and r['success']:
+                verified_aets.add(r['called_aet'])
+                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config)
+                if study:
+                    print(f"  [OK] Verified sample study for AET {r['called_aet']}")
+
     finally:
         dicom_sender.endpoint.remote_ae_title = original_aet
 
@@ -281,7 +295,9 @@ def test_multiple_aets_batch_send(
 def test_unknown_called_aet(
     single_dicom_file,
     dicom_sender,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Test sending to an unknown/unregistered called AE Title.
@@ -340,6 +356,16 @@ def test_unknown_called_aet(
             print(f"  Error rate: {metrics.error_rate:.1%}")
             print(f"  Failures: {metrics.failures}")
 
+        # C-FIND verification (non-failing — documents whether Compass stored it)
+        if metrics.successes == 1 and cfind_client is not None:
+            print(f"\n[C-FIND VERIFICATION (informational)]")
+            try:
+                study = verify_study_arrived(cfind_client, test_study_uid, perf_config)
+                if study:
+                    print(f"  Study WAS stored in Compass despite unknown AET")
+            except AssertionError:
+                print(f"  Study was NOT found via C-FIND (may not have been stored)")
+
         # Document the behavior, but don't fail test
         print(f"\n[DOCUMENTED BEHAVIOR]")
         behavior = 'ACCEPTED' if metrics.successes == 1 else 'REJECTED'
@@ -359,7 +385,9 @@ def test_unknown_called_aet(
 def test_called_aet_with_modality_combinations(
     dicom_by_modality: dict,
     dicom_sender,
-    modality: str
+    modality: str,
+    cfind_client,
+    perf_config,
 ):
     """
     Test called AET routing with different modalities.
@@ -417,6 +445,14 @@ def test_called_aet_with_modality_combinations(
         # Verify all succeeded
         assert all(r['success'] for r in results), \
             f"Some AET+Modality combinations failed for {modality}"
+
+        # C-FIND verification for each send
+        print(f"\n[C-FIND VERIFICATION]")
+        for r in results:
+            if r['success']:
+                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config)
+                if study:
+                    print(f"  [OK] Verified {r['aet']} + {modality}")
 
     finally:
         dicom_sender.endpoint.remote_ae_title = original_aet

@@ -13,6 +13,7 @@ import pytest
 
 from data_loader import load_dataset
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 # ============================================================================
@@ -119,7 +120,9 @@ def test_routing_transformation(
     test_case: dict,
     test_dicom_with_attributes,
     dicom_sender,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Test Compass routing transformations based on input attributes.
@@ -190,8 +193,11 @@ def test_routing_transformation(
             print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
             
             # Automated verification via C-FIND
-            print(f"\n[STEP 2: AUTOMATED VERIFICATION]")
-            query_and_verify(dicom_sender, test_dataset.StudyInstanceUID, test_case['expected'])
+            print(f"\n[STEP 2: AUTOMATED VERIFICATION VIA C-FIND]")
+            query_and_verify(
+                cfind_client, perf_config,
+                str(test_dataset.StudyInstanceUID), test_case['expected'],
+            )
             
             print(f"\n[RESULT: TEST COMPLETE]")
             
@@ -209,130 +215,49 @@ def test_routing_transformation(
 # Automated Verification via C-FIND
 # ============================================================================
 
-def query_and_verify(dicom_sender, study_uid: str, expected_attributes: dict,
-                     calling_aet: str = None,
-                     timeout_seconds: int = 30, poll_interval: float = 2.0):
+def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attributes: dict):
     """
-    Query Compass database and verify transformations were applied.
-    
-    Uses database queries to find studies and DICOM tags.
-    Polls Compass database for up to timeout_seconds waiting for study to appear.
-    
+    Query Compass via C-FIND and verify transformations were applied.
+
     Args:
-        dicom_sender: DicomSender instance
-        study_uid: StudyInstanceUID to query
-        expected_attributes: Dict of expected attribute values (snake_case keys)
-        calling_aet: Not used for database queries (kept for compatibility)
-        timeout_seconds: Maximum seconds to wait for study to appear (default: 30)
-        poll_interval: Seconds between polls (default: 2.0)
+        cfind_client: CompassCFindClient instance (or None).
+        perf_config: TestConfig with timeout / poll settings.
+        study_uid: StudyInstanceUID to query.
+        expected_attributes: Dict of expected attribute values (snake_case keys).
     """
-    import time
-    
-    print(f"\n  [AUTOMATED VERIFICATION VIA DATABASE QUERY]")
-    print(f"  Querying Compass database for study: {study_uid}")
-    print(f"  Timeout: {timeout_seconds}s")
-    
-    try:
-        from compass_db_query import CompassDatabaseClient, CompassDatabaseConfig
-    except ImportError:
-        print(f"  ERROR: compass_db_query not available")
-        print(f"  Cannot perform automated verification")
-        raise AssertionError(
-            "compass_db_query module not available. "
-            "Automated verification cannot run."
-        )
-    
-    try:
-        # Load database config from environment
-        config = CompassDatabaseConfig.from_env()
-        
-        print(f"  Database: {config.database} on {config.server}")
-        
-        # Poll for the study with timeout
-        start_time = time.time()
-        study_data = None
-        attempts = 0
-        
-        while time.time() - start_time < timeout_seconds:
-            attempts += 1
-            
-            with CompassDatabaseClient(config) as client:
-                study_data = client.get_job_by_study_uid(study_uid)
-            
-            if study_data:
-                elapsed = time.time() - start_time
-                print(f"  SUCCESS: Study found in Compass after {elapsed:.1f}s ({attempts} attempts)")
-                break
-            
-            if attempts == 1:
-                print(f"  Waiting for study to appear in Compass database...")
-            
-            time.sleep(poll_interval)
-        
-        if not study_data:
-            elapsed = time.time() - start_time
-            print(f"  ERROR: Study not found in Compass after {elapsed:.1f}s ({attempts} attempts)")
-            print(f"  StudyInstanceUID: {study_uid}")
-            print(f"  Possible reasons:")
-            print(f"    - Study not yet processed by Compass (waited {timeout_seconds}s)")
-            print(f"    - Compass routing without storing locally")
-            print(f"    - Database connection/permissions issue")
-            print(f"    - Study was rejected/filtered")
+    print(f"\n  [AUTOMATED VERIFICATION VIA C-FIND]")
+
+    study_data = verify_study_arrived(cfind_client, study_uid, perf_config)
+
+    if study_data is None:
+        # verify_study_arrived returned None (CFIND_VERIFY=false)
+        print(f"  Skipped (C-FIND verification disabled)")
+        return
+
+    # Verify each expected attribute
+    print(f"\n  Verifying expected transformations:")
+
+    for attr_name, expected_value in expected_attributes.items():
+        # Convert snake_case to PascalCase DICOM attribute name
+        dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
+
+        actual_value = study_data.get(dicom_attr, None)
+
+        if actual_value is None:
+            print(f"    {dicom_attr}: NOT FOUND in C-FIND response")
             raise AssertionError(
-                f"Study not found in Compass after {timeout_seconds}s: {study_uid}\n"
-                f"Database query returned no results after {attempts} attempts. "
-                f"Study may not have been received or stored."
+                f"{dicom_attr} not found in C-FIND response for study {study_uid}"
             )
-        
-        # Verify each expected attribute
-        print(f"\n  Verifying expected transformations:")
-        all_matched = True
-        
-        for attr_name, expected_value in expected_attributes.items():
-            # Convert snake_case to PascalCase DICOM attribute name
-            dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
-            
-            # Get actual value from study
-            actual_value = study_data.get(dicom_attr, None)
-            
-            if actual_value is None:
-                print(f"    {dicom_attr}: NOT FOUND in database")
-                all_matched = False
-            elif str(actual_value).strip() == str(expected_value).strip():
-                print(f"    {dicom_attr}: '{actual_value}' - MATCH")
-            else:
-                print(f"    {dicom_attr}: '{actual_value}' - MISMATCH")
-                print(f"      Expected: '{expected_value}'")
-                all_matched = False
-                # Raise assertion error for test failure
-                raise AssertionError(
-                    f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
-                )
-        
-        if all_matched:
-            print(f"\n  DATABASE VERIFICATION PASSED - All transformations correct!")
+        elif str(actual_value).strip() == str(expected_value).strip():
+            print(f"    {dicom_attr}: '{actual_value}' - MATCH")
         else:
-            print(f"\n  DATABASE VERIFICATION FAILED - See mismatches above")
-    
-    except ConnectionError as e:
-        print(f"  ERROR: Database connection failed: {e}")
-        print(f"  Cannot connect to Compass database for verification")
-        raise AssertionError(
-            f"Database connection failed: {e}\n"
-            f"Cannot verify study was received by Compass."
-        )
-    
-    except AssertionError:
-        # Re-raise assertion errors for test failure
-        raise
-    
-    except Exception as e:
-        print(f"  ERROR: Database query failed: {e}")
-        print(f"  Unexpected error during verification")
-        raise AssertionError(
-            f"Database query failed: {e}\n"
-            f"Cannot verify study was received by Compass."
-        )
+            print(f"    {dicom_attr}: '{actual_value}' - MISMATCH")
+            print(f"      Expected: '{expected_value}'")
+            raise AssertionError(
+                f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
+            )
+
+    print(f"\n  C-FIND VERIFICATION PASSED - All transformations correct!")
 
 
 # ============================================================================

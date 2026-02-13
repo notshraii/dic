@@ -171,6 +171,8 @@ def test_anonymize_and_send_single_file(
     dicom_sender: DicomSender,
     temp_anonymized_file,
     metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Integration test: Anonymize a file and send to Compass.
@@ -226,6 +228,18 @@ def test_anonymize_and_send_single_file(
     assert latency < 5000, f"Latency {latency:.2f}ms exceeds threshold of 5000ms"
     print(f"  [OK] Average latency: {latency:.2f} ms")
     
+    # C-FIND verification
+    from tests.conftest import verify_study_arrived
+    print(f"\n{'='*60}")
+    print("STEP 4: C-FIND VERIFICATION")
+    print(f"{'='*60}")
+    study = verify_study_arrived(cfind_client, new_uids['study_uid'], perf_config)
+    if study:
+        instances = study.get('NumberOfStudyRelatedInstances')
+        if instances is not None:
+            assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+
     print(f"\n  [SUCCESS] ALL VERIFICATIONS PASSED")
     print(f"  Summary: {snapshot}")
 
@@ -235,6 +249,7 @@ def test_anonymize_and_send_from_shared_drive(
     dicom_sender: DicomSender,
     metrics: PerfMetrics,
     perf_config,
+    cfind_client,
 ):
     """
     Integration test using a file path from environment variable.
@@ -275,7 +290,16 @@ def test_anonymize_and_send_from_shared_drive(
         
         snapshot = metrics.snapshot()
         print(f"\n[SUCCESS] Test passed. Metrics: {snapshot}")
-        
+
+        # C-FIND verification
+        from tests.conftest import verify_study_arrived
+        study = verify_study_arrived(cfind_client, new_uids['study_uid'], perf_config)
+        if study:
+            instances = study.get('NumberOfStudyRelatedInstances')
+            if instances is not None:
+                assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+                print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+
     finally:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)

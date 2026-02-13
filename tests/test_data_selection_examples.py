@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 # ============================================================================
@@ -18,26 +19,32 @@ from metrics import PerfMetrics
 # ============================================================================
 
 @pytest.mark.integration
-def test_send_large_file(dicom_sender, large_dicom_file: Path, metrics: PerfMetrics):
+def test_send_large_file(dicom_sender, large_dicom_file: Path, metrics: PerfMetrics,
+                         cfind_client, perf_config):
     """
     Test sending a large DICOM file (>10MB).
-    
+
     Automatically skips if no large file is available.
     Uses the large_dicom_file fixture which selects appropriately.
     """
     from data_loader import load_dataset
-    
+
     file_size_mb = large_dicom_file.stat().st_size / (1024 * 1024)
     print(f"Testing with large file: {file_size_mb:.2f}MB")
-    
+
     ds = load_dataset(large_dicom_file)
     dicom_sender._send_single_dataset(ds, metrics)
-    
+
     assert metrics.successes == 1, "Large file send failed"
     assert metrics.error_rate == 0, "Errors occurred during large file send"
-    
+
     # Large files may take longer, so use higher latency threshold
     assert metrics.avg_latency_ms < 10000, f"Large file took too long: {metrics.avg_latency_ms}ms"
+
+    # C-FIND verification
+    study_uid = str(ds.StudyInstanceUID) if hasattr(ds, 'StudyInstanceUID') else None
+    if study_uid:
+        verify_study_arrived(cfind_client, study_uid, perf_config)
 
 
 # ============================================================================
@@ -45,26 +52,34 @@ def test_send_large_file(dicom_sender, large_dicom_file: Path, metrics: PerfMetr
 # ============================================================================
 
 @pytest.mark.integration
-def test_send_batch_small_files(dicom_sender, small_dicom_files: List[Path], metrics: PerfMetrics):
+def test_send_batch_small_files(dicom_sender, small_dicom_files: List[Path], metrics: PerfMetrics,
+                                cfind_client, perf_config):
     """
     Test sending a batch of small files (<1MB each).
-    
+
     Automatically skips if fewer than 3 small files available.
     Returns up to 10 small files from the dataset.
     """
     from data_loader import load_dataset
-    
+
     print(f"Sending batch of {len(small_dicom_files)} small files...")
-    
+
+    sent_uids = []
     for file in small_dicom_files:
         ds = load_dataset(file)
         dicom_sender._send_single_dataset(ds, metrics)
-    
+        if hasattr(ds, 'StudyInstanceUID'):
+            sent_uids.append(str(ds.StudyInstanceUID))
+
     expected_count = len(small_dicom_files)
     assert metrics.total == expected_count, f"Expected {expected_count} sends, got {metrics.total}"
     assert metrics.error_rate == 0, f"Some sends failed: {metrics.failures} failures"
-    
+
     print(f"Successfully sent {metrics.successes} files")
+
+    # C-FIND verification (sample up to 5)
+    for uid in list(dict.fromkeys(sent_uids))[:5]:
+        verify_study_arrived(cfind_client, uid, perf_config)
 
 
 # ============================================================================
@@ -77,30 +92,39 @@ def test_send_by_modality(
     dicom_sender,
     dicom_by_modality: dict,
     metrics: PerfMetrics,
-    modality: str
+    modality: str,
+    cfind_client,
+    perf_config,
 ):
     """
     Test sending files of specific modality.
-    
+
     Parametrized to run for CT, MR, CR, and US.
     Gracefully skips if a particular modality is not available.
     """
     from data_loader import load_dataset
     from tests.conftest import get_files_by_modality
-    
+
     # This will skip if modality not available
     files = get_files_by_modality(dicom_by_modality, modality, count=3)
-    
+
     print(f"Testing {modality} modality with {len(files)} files")
-    
+
+    sent_uids = []
     for file in files:
         ds = load_dataset(file)
         dicom_sender._send_single_dataset(ds, metrics)
-    
+        if hasattr(ds, 'StudyInstanceUID'):
+            sent_uids.append(str(ds.StudyInstanceUID))
+
     assert metrics.successes == len(files), f"{modality}: Some sends failed"
     assert metrics.error_rate == 0, f"{modality}: Error rate too high"
-    
+
     print(f"{modality}: All {len(files)} files sent successfully")
+
+    # C-FIND verification (sample up to 3)
+    for uid in list(dict.fromkeys(sent_uids))[:3]:
+        verify_study_arrived(cfind_client, uid, perf_config)
 
 
 # ============================================================================

@@ -9,6 +9,7 @@ from __future__ import annotations
 import itertools
 import tempfile
 import shutil
+import threading
 from datetime import datetime
 from typing import Tuple
 
@@ -17,6 +18,7 @@ from pydicom import dcmread
 from pydicom.uid import generate_uid
 
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 def generate_accession_number() -> str:
@@ -89,6 +91,7 @@ def test_routing_throughput_under_peak_plus(
     metrics: PerfMetrics,
     perf_config,
     multiplier,
+    cfind_client,
 ):
     """
     Push Compass to 150 percent and 200 percent of configured peak_images_per_second.
@@ -99,12 +102,23 @@ def test_routing_throughput_under_peak_plus(
     target_peak = perf_config.load_profile.peak_images_per_second * multiplier
     duration = perf_config.load_profile.test_duration_seconds
 
+    # Thread-safe collection of sample UIDs for verification
+    _sampled_uids = []
+    _sample_lock = threading.Lock()
+    _max_samples = 20
+
     # Create anonymized variants generator
     # This will continuously create new anonymized copies with unique UIDs
     def anonymized_dataset_generator():
         for ds in itertools.cycle(dicom_datasets):
-            yield create_anonymized_variant(ds)
-    
+            variant = create_anonymized_variant(ds)
+            # Collect a sample of UIDs for post-test verification
+            if len(_sampled_uids) < _max_samples:
+                with _sample_lock:
+                    if len(_sampled_uids) < _max_samples:
+                        _sampled_uids.append(str(variant.StudyInstanceUID))
+            yield variant
+
     print(f"\n[INFO] Starting throughput test with {multiplier}x multiplier")
     print(f"[INFO] Each file will be anonymized with unique UIDs before sending")
     print(f"[INFO] Source files: {len(dicom_datasets)}")
@@ -141,4 +155,11 @@ def test_routing_throughput_under_peak_plus(
 
     print(f"\n[SUCCESS] Sent {total_sent} anonymized files with unique IDs")
     print("Throughput snapshot:", snapshot)
+
+    # Sample-based C-FIND verification (up to 5 from collected UIDs)
+    sample_uids = _sampled_uids[:5]
+    if sample_uids:
+        print(f"\n[C-FIND VERIFICATION] Verifying sample of {len(sample_uids)} study UIDs")
+        for uid in sample_uids:
+            verify_study_arrived(cfind_client, uid, perf_config)
 

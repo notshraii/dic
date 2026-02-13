@@ -22,6 +22,7 @@ if str(project_root) not in sys.path:
 
 # Import from root-level modules (compass_perf contents moved to root)
 from config import TestConfig
+from compass_cfind_client import CompassCFindClient, CompassCFindConfig
 from data_loader import find_dicom_files, load_dataset
 from dicom_sender import DicomSender
 from metrics import PerfMetrics
@@ -96,6 +97,70 @@ def compass_config(perf_config):
     }
 
 
+@pytest.fixture(scope="session")
+def cfind_client(perf_config) -> Optional[CompassCFindClient]:
+    """Session-scoped C-FIND client for verifying studies arrived in Compass."""
+    if not perf_config.integration.cfind_verify:
+        return None
+    config = CompassCFindConfig.from_env()
+    return CompassCFindClient(config)
+
+
+def verify_study_arrived(
+    cfind_client: Optional[CompassCFindClient],
+    study_uid: str,
+    perf_config: TestConfig,
+) -> Optional[dict]:
+    """
+    Poll C-FIND to confirm a study arrived in Compass.
+
+    Args:
+        cfind_client: CompassCFindClient instance (None means verification disabled).
+        study_uid: StudyInstanceUID to look for.
+        perf_config: TestConfig for timeout / poll-interval settings.
+
+    Returns:
+        Dict of study attributes on success.
+
+    Raises:
+        AssertionError if the study is not found within the timeout.
+    """
+    if cfind_client is None:
+        print("  [CFIND VERIFY] Skipped (CFIND_VERIFY=false)")
+        return None
+
+    timeout = perf_config.integration.cfind_timeout
+    interval = perf_config.integration.cfind_poll_interval
+
+    print(f"  [CFIND VERIFY] Polling for StudyInstanceUID: {study_uid}")
+    print(f"  [CFIND VERIFY] Timeout: {timeout}s, poll interval: {interval}s")
+
+    start = time.time()
+    attempts = 0
+
+    while True:
+        attempts += 1
+        result = cfind_client.find_study_by_uid(study_uid)
+        if result is not None:
+            study_dict = cfind_client.dataset_to_dict(result)
+            elapsed = time.time() - start
+            print(f"  [CFIND VERIFY] Study found after {elapsed:.1f}s ({attempts} attempts)")
+            for key, val in study_dict.items():
+                print(f"    {key}: {val}")
+            return study_dict
+
+        elapsed = time.time() - start
+        if elapsed >= timeout:
+            break
+        remaining = timeout - elapsed
+        sleep_time = min(interval, remaining)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+
+    raise AssertionError(
+        f"C-FIND verification failed: study {study_uid} not found "
+        f"after {timeout}s ({attempts} attempts)"
+    )
 
 
 # ============================================================================

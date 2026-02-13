@@ -15,6 +15,7 @@ from pydicom.uid import generate_uid
 
 from data_loader import load_dataset
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 # ============================================================================
@@ -26,7 +27,9 @@ from metrics import PerfMetrics
 def test_send_with_2min_pause_between_files(
     dicom_sender,
     small_dicom_files: List[Path],
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_FailureMode_DelayDuringSend
@@ -54,27 +57,29 @@ def test_send_with_2min_pause_between_files(
     print(f"{'='*70}")
     print(f"  Total estimated time: {len(test_files) * delay_seconds / 60:.1f} minutes")
     
+    sent_uids = []
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
-        
+
         # Generate unique UIDs for tracking
         ds.StudyInstanceUID = generate_uid()
         ds.SeriesInstanceUID = generate_uid()
         ds.SOPInstanceUID = generate_uid()
-        
+        sent_uids.append(str(ds.StudyInstanceUID))
+
         print(f"\n[{i}/{len(test_files)}] Sending file: {file.name}")
         print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
-        
+
         start_time = time.time()
         dicom_sender._send_single_dataset(ds, metrics)
         send_duration = time.time() - start_time
-        
+
         print(f"  Send completed in {send_duration:.2f}s")
-        
+
         if i < len(test_files):
             print(f"  Pausing for {delay_seconds}s before next send...")
             time.sleep(delay_seconds)
-    
+
     # Verify all files sent successfully
     print(f"\n{'='*70}")
     print(f"RESULTS")
@@ -83,14 +88,19 @@ def test_send_with_2min_pause_between_files(
     print(f"  Successes: {metrics.successes}")
     print(f"  Failures: {metrics.failures}")
     print(f"  Error rate: {metrics.error_rate:.1%}")
-    
+
     assert metrics.successes == len(test_files), \
         f"Expected {len(test_files)} successes, got {metrics.successes}"
-    
+
     assert metrics.error_rate == 0, \
         f"Some sends failed despite delays: {metrics.failures} failures"
-    
-    print(f"\n[SUCCESS] All {len(test_files)} files sent successfully with 2-min delays")
+
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    for uid in sent_uids:
+        verify_study_arrived(cfind_client, uid, perf_config)
+
+    print(f"\n[SUCCESS] All {len(test_files)} files sent and verified with 2-min delays")
 
 
 @pytest.mark.integration
@@ -98,7 +108,9 @@ def test_send_with_2min_pause_between_files(
 def test_mcie_slow_send_one_at_a_time(
     dicom_sender,
     small_dicom_files: List[Path],
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_FailureMode_DelayDuringMCIESend
@@ -155,12 +167,17 @@ def test_mcie_slow_send_one_at_a_time(
         assert metrics.successes == len(test_files)
         assert metrics.error_rate == 0
         
-        print(f"\n[MANUAL VERIFICATION REQUIRED]")
-        print(f"  1. Check MIDIA for StudyInstanceUID: {study_uid}")
-        print(f"  2. Verify all {len(test_files)} images present")
-        print(f"  3. Check InfinityView for same study")
-        print(f"  4. Verify routing completed despite slow send")
-        
+        # C-FIND verification
+        print(f"\n[C-FIND VERIFICATION]")
+        cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+        if cfind_study:
+            instances = cfind_study.get('NumberOfStudyRelatedInstances')
+            if instances is not None:
+                count = int(instances)
+                assert count >= len(test_files), \
+                    f"Expected >= {len(test_files)} instances, got {count}"
+                print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
+
     finally:
         dicom_sender.endpoint.local_ae_title = original_aet
 
@@ -173,7 +190,9 @@ def test_mcie_slow_send_one_at_a_time(
 def test_send_duplicate_study_multiple_times(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_FailureMode_SendDuplicateMCIEStudy
@@ -244,12 +263,14 @@ def test_send_duplicate_study_multiple_times(
     assert metrics.successes == num_sends, \
         f"Expected {num_sends} successful sends, got {metrics.successes}"
     
-    print(f"\n[MANUAL VERIFICATION REQUIRED]")
-    print(f"  1. Query for StudyInstanceUID: {fixed_study_uid}")
-    print(f"  2. Verify {num_sends} separate entries/records exist")
-    print(f"  3. Check MCIE_ENTRIES table if applicable")
-    print(f"  4. Verify each send is logged/tracked separately")
-    
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    cfind_study = verify_study_arrived(cfind_client, str(fixed_study_uid), perf_config)
+    if cfind_study:
+        instances = cfind_study.get('NumberOfStudyRelatedInstances')
+        if instances is not None:
+            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+
     print(f"\n[SUCCESS] All {num_sends} duplicate sends accepted by Compass")
 
 
@@ -257,7 +278,9 @@ def test_send_duplicate_study_multiple_times(
 def test_resend_after_modifications(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Send study, modify tags, resend with same StudyInstanceUID.
@@ -313,12 +336,13 @@ def test_resend_after_modifications(
     assert send2_metrics.successes == 1, "Second send failed"
     print(f"  Status: SUCCESS")
     
-    print(f"\n[MANUAL VERIFICATION]")
-    print(f"  Query for StudyInstanceUID: {study_uid}")
-    print(f"  Verify how Compass handled the modified duplicate:")
-    print(f"    - Does it create 2 entries?")
-    print(f"    - Does it update the existing entry?")
-    print(f"    - Which PatientName is stored?")
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    if cfind_study:
+        pn = cfind_study.get('PatientName', '')
+        print(f"  [INFO] PatientName in Compass: {pn}")
+        print(f"  [INFO] Original was '{original_patient}', modified was '{modified_patient}'")
 
 
 # ============================================================================
@@ -329,7 +353,9 @@ def test_resend_after_modifications(
 def test_send_with_variable_delays(
     dicom_sender,
     small_dicom_files: List[Path],
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Send files with random variable delays to simulate network variability.
@@ -366,8 +392,16 @@ def test_send_with_variable_delays(
     
     assert metrics.successes == len(test_files)
     assert metrics.error_rate == 0
-    
-    print(f"\n[SUCCESS] All files sent despite variable delays")
+
+    # C-FIND verification for the shared study
+    print(f"\n[C-FIND VERIFICATION]")
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    if cfind_study:
+        instances = cfind_study.get('NumberOfStudyRelatedInstances')
+        if instances is not None:
+            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+
+    print(f"\n[SUCCESS] All files sent and verified despite variable delays")
 
 
 # ============================================================================

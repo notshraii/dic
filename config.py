@@ -136,15 +136,22 @@ class PerformanceThresholdsConfig:
 class IntegrationTestConfig:
     """
     Configuration specific to integration/functional tests.
-    
+
     Used by: Integration tests (test_anonymize_and_send, etc.)
     """
     test_dicom_file: Optional[str] = None  # Specific file for anonymize test
+    cfind_verify: bool = True              # Enable C-FIND verification after sends
+    cfind_timeout: int = 15                # Poll timeout in seconds
+    cfind_poll_interval: float = 2.0       # Poll interval in seconds
 
     @classmethod
     def from_env(cls) -> "IntegrationTestConfig":
+        cfind_verify_str = _env_str("CFIND_VERIFY", "true")
         return cls(
             test_dicom_file=_env_str("TEST_DICOM_FILE", None),
+            cfind_verify=cfind_verify_str.lower() not in ("false", "0", "no"),
+            cfind_timeout=_env_int("CFIND_TIMEOUT", 15),
+            cfind_poll_interval=_env_float("CFIND_POLL_INTERVAL", 2.0),
         )
 
 

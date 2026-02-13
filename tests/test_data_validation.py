@@ -15,6 +15,7 @@ from pydicom.uid import generate_uid
 
 from data_loader import load_dataset
 from metrics import PerfMetrics
+from tests.conftest import verify_study_arrived
 
 
 # ============================================================================
@@ -25,7 +26,9 @@ from metrics import PerfMetrics
 def test_populate_blank_study_date(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_DataModification_PopulateBlankStudyDate
@@ -83,19 +86,24 @@ def test_populate_blank_study_date(
     print(f"  Status: SUCCESS")
     print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
     
-    # Manual verification instructions
+    # C-FIND verification
     print(f"\n{'='*70}")
-    print(f"MANUAL VERIFICATION REQUIRED")
+    print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
-    print(f"  1. Query Compass/PACS for StudyInstanceUID:")
-    print(f"     {ds.StudyInstanceUID}")
-    print(f"  2. Verify StudyDate was populated")
-    print(f"  3. Verify StudyTime was populated")
-    print(f"  4. Verify they match AcquisitionDate/Time:")
-    print(f"     Expected StudyDate: {original_acquisition_date or 'Not available'}")
-    print(f"     Expected StudyTime: {original_acquisition_time or 'Not available'}")
-    print(f"  5. Or verify they match current date/time if no acquisition date")
-    
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    if study:
+        cfind_date = study.get('StudyDate', '')
+        if cfind_date and cfind_date.strip():
+            print(f"  [OK] StudyDate was populated by Compass: {cfind_date}")
+        else:
+            print(f"  [INFO] StudyDate is still blank after Compass processing")
+        expected_date = original_acquisition_date or ''
+        if expected_date and cfind_date:
+            if cfind_date.strip() == expected_date.strip():
+                print(f"  [OK] StudyDate matches AcquisitionDate: {expected_date}")
+            else:
+                print(f"  [INFO] StudyDate ({cfind_date}) differs from AcquisitionDate ({expected_date})")
+
     print(f"\n[SUCCESS] File sent without StudyDate/Time")
 
 
@@ -103,7 +111,9 @@ def test_populate_blank_study_date(
 def test_preserve_existing_study_date(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Verify Compass preserves existing study date when present.
@@ -138,11 +148,15 @@ def test_preserve_existing_study_date(
     assert metrics.successes == 1
     print(f"  Status: SUCCESS")
     
-    print(f"\n[MANUAL VERIFICATION]")
-    print(f"  Query for StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  Verify StudyDate is still: {test_study_date}")
-    print(f"  Verify StudyTime is still: {test_study_time}")
-    print(f"  (Should not be modified by Compass)")
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    if study:
+        cfind_date = study.get('StudyDate', '')
+        if cfind_date and cfind_date.strip() == test_study_date:
+            print(f"  [OK] StudyDate preserved: {cfind_date}")
+        else:
+            print(f"  [WARN] StudyDate changed: expected {test_study_date}, got {cfind_date}")
 
 
 # ============================================================================
@@ -153,7 +167,9 @@ def test_preserve_existing_study_date(
 def test_iims_accession_number_generation(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_APICall_GetIIMSAccessionNumber
@@ -192,19 +208,18 @@ def test_iims_accession_number_generation(
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
+    # C-FIND verification
     print(f"\n{'='*70}")
-    print(f"MANUAL VERIFICATION REQUIRED")
+    print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
-    print(f"  1. Check IIMS API logs for web service call")
-    print(f"     - Look for calls around {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"     - Verify StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  2. Query Compass/PACS for the study:")
-    print(f"     SELECT AccessionNumber")
-    print(f"     FROM studies")
-    print(f"     WHERE StudyInstanceUID = '{ds.StudyInstanceUID}'")
-    print(f"  3. Verify AccessionNumber is populated (not blank)")
-    print(f"  4. Verify format matches IIMS accession number pattern")
-    
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    if study:
+        acc = study.get('AccessionNumber', '')
+        if acc and acc.strip():
+            print(f"  [OK] AccessionNumber populated by IIMS: {acc}")
+        else:
+            print(f"  [INFO] AccessionNumber still blank after Compass processing")
+
     print(f"\n[SUCCESS] File sent with blank AccessionNumber")
 
 
@@ -212,7 +227,9 @@ def test_iims_accession_number_generation(
 def test_pass_device_accession_number(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     COMPASS_DataValidation_PassDeviceAccessionNumber
@@ -248,15 +265,16 @@ def test_pass_device_accession_number(
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
-    print(f"\n{'='*70}")
-    print(f"MANUAL VERIFICATION REQUIRED")
-    print(f"{'='*70}")
-    print(f"  1. Query for StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  2. Verify AccessionNumber is: {test_accession}")
-    print(f"  3. Verify it was NOT changed by Compass")
-    print(f"  4. Verify it was NOT replaced by IIMS-generated number")
-    print(f"  5. Check routing - study should use this accession number")
-    
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    if study:
+        acc = study.get('AccessionNumber', '')
+        if acc and acc.strip() == test_accession:
+            print(f"  [OK] AccessionNumber preserved: {acc}")
+        else:
+            print(f"  [WARN] AccessionNumber changed: expected {test_accession}, got '{acc}'")
+
     print(f"\n[SUCCESS] File sent with device AccessionNumber")
 
 
@@ -264,6 +282,8 @@ def test_pass_device_accession_number(
 def test_accession_number_edge_cases(
     dicom_sender,
     single_dicom_file: Path,
+    cfind_client,
+    perf_config,
 ):
     """
     Test various accession number edge cases.
@@ -317,10 +337,15 @@ def test_accession_number_edge_cases(
         if metrics.successes == 1:
             print(f"  Result: SUCCESS")
             print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
+            # C-FIND verification
+            study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+            if study:
+                acc = study.get('AccessionNumber', '')
+                print(f"  C-FIND AccessionNumber: '{acc}'")
         else:
             print(f"  Result: FAILED (may be expected)")
             print(f"  Error rate: {metrics.error_rate:.1%}")
-        
+
         time.sleep(2)  # Brief pause between edge cases
 
 
@@ -332,7 +357,9 @@ def test_accession_number_edge_cases(
 def test_blank_patient_name_handling(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Send file with blank PatientName.
@@ -365,12 +392,15 @@ def test_blank_patient_name_handling(
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
-    print(f"\n[MANUAL VERIFICATION]")
-    print(f"  Query for StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  Verify Compass handling of blank PatientName:")
-    print(f"    - Is it left blank?")
-    print(f"    - Is it populated with default value?")
-    print(f"    - Does routing still work?")
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    if study:
+        pn = study.get('PatientName', '')
+        if pn and pn.strip():
+            print(f"  [INFO] PatientName populated by Compass: {pn}")
+        else:
+            print(f"  [INFO] PatientName remains blank")
 
 
 @pytest.mark.integration
@@ -438,7 +468,9 @@ def test_special_characters_in_patient_data(
 def test_missing_modality_tag(
     dicom_sender,
     single_dicom_file: Path,
-    metrics: PerfMetrics
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
 ):
     """
     Send file with missing Modality tag.
@@ -480,6 +512,12 @@ def test_missing_modality_tag(
         print(f"    Status: REJECTED (expected - Modality is usually required)")
         print(f"    Error rate: {metrics.error_rate:.1%}")
     
+    # C-FIND verification (informational)
+    if metrics.successes == 1:
+        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+        if study:
+            print(f"  [INFO] Study stored in Compass despite missing Modality")
+
     print(f"\n  Note: DICOM standard requires Modality, but behavior varies by system")
 
 
