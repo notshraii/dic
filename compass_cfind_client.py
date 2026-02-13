@@ -142,10 +142,11 @@ class CompassCFindClient:
         ds = Dataset()
         ds.QueryRetrieveLevel = "STUDY"
         ds.StudyInstanceUID = study_uid
-        
+
         # Request all available study-level attributes
+        # PatientID with wildcard is required by some DICOM servers
         ds.PatientName = ""
-        ds.PatientID = ""
+        ds.PatientID = "*"
         ds.PatientBirthDate = ""
         ds.PatientSex = ""
         ds.StudyDate = ""
@@ -213,14 +214,14 @@ class CompassCFindClient:
         
         # Request study attributes
         ds.StudyInstanceUID = ""
-        ds.PatientID = ""
+        ds.PatientID = "*"
         ds.PatientName = ""
         ds.StudyDate = ""
         ds.StudyTime = ""
         ds.StudyDescription = ""
         ds.ModalitiesInStudy = ""
         ds.NumberOfStudyRelatedInstances = ""
-        
+
         logger.info(f"Querying for accession: {accession_number}")
         return self._execute_find(ds)
     
@@ -246,10 +247,10 @@ class CompassCFindClient:
             ds.StudyDate = f"{start_date}-{end_date}"
         else:
             ds.StudyDate = start_date
-        
+
         # Request study attributes
         ds.StudyInstanceUID = ""
-        ds.PatientID = ""
+        ds.PatientID = "*"
         ds.PatientName = ""
         ds.StudyTime = ""
         ds.AccessionNumber = ""
@@ -286,13 +287,13 @@ class CompassCFindClient:
         
         # Request study attributes
         ds.StudyInstanceUID = ""
-        ds.PatientID = ""
+        ds.PatientID = "*"
         ds.PatientName = ""
         ds.StudyTime = ""
         ds.AccessionNumber = ""
         ds.StudyDescription = ""
         ds.NumberOfStudyRelatedInstances = ""
-        
+
         logger.info(f"Querying for modality: {modality}")
         return self._execute_find(ds)
     
@@ -308,6 +309,7 @@ class CompassCFindClient:
             today = datetime.now().strftime("%Y%m%d")
             ds = Dataset()
             ds.QueryRetrieveLevel = "STUDY"
+            ds.PatientID = "*"
             ds.StudyDate = today
             ds.StudyInstanceUID = ""
             
