@@ -5,9 +5,12 @@ Global pytest fixtures for DICOM testing with automatic configuration and datase
 """
 
 import os
+import platform
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import pytest
 from dotenv import load_dotenv
@@ -22,6 +25,7 @@ from config import TestConfig
 from data_loader import find_dicom_files, load_dataset
 from dicom_sender import DicomSender
 from metrics import PerfMetrics
+from report import ReportData, TestResult, generate_html_report
 
 # Load .env file from project root
 dotenv_path = project_root / ".env"
@@ -31,11 +35,20 @@ if dotenv_path.exists():
 else:
     print(f"WARNING: .env file not found at {dotenv_path}")
 
+# ---------------------------------------------------------------------------
+# Report collection globals
+# ---------------------------------------------------------------------------
+_report_test_results: List[TestResult] = []
+_report_session_start: float = 0.0
+_report_config: Optional[TestConfig] = None
+
 
 @pytest.fixture(scope="session")
 def perf_config() -> TestConfig:
     """Performance configuration from environment variables."""
+    global _report_config
     cfg = TestConfig.from_env()
+    _report_config = cfg
     return cfg
 
 
@@ -55,9 +68,11 @@ def dicom_datasets(dicom_files: List[Path]):
 
 
 @pytest.fixture
-def metrics() -> PerfMetrics:
+def metrics(request) -> PerfMetrics:
     """Metrics collector for tracking performance."""
-    return PerfMetrics()
+    m = PerfMetrics()
+    request.node._perf_metrics = m
+    return m
 
 
 @pytest.fixture(scope="session")
@@ -360,3 +375,127 @@ def test_dicom_with_attributes(single_dicom_file):
         return temp_path, ds
     
     return _create_test_file
+
+
+# ============================================================================
+# HTML Report Hooks
+# ============================================================================
+
+def pytest_sessionstart(session):
+    """Record session start time for report duration calculation."""
+    global _report_session_start, _report_test_results
+    _report_session_start = time.time()
+    _report_test_results = []
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Capture per-test results for the HTML report."""
+    outcome = yield
+    report = outcome.get_result()
+
+    # Only process the "call" phase (the actual test), or "setup" if it failed
+    if report.when == "call" or (report.when == "setup" and report.failed):
+        if report.when == "setup" and report.failed:
+            test_outcome = "error"
+        elif report.skipped:
+            test_outcome = "skipped"
+        elif report.passed:
+            test_outcome = "passed"
+        else:
+            test_outcome = "failed"
+
+        # Extract perf metrics if the test used the metrics fixture
+        perf_snapshot = None
+        perf_samples = None
+        thresholds = None
+        perf_metrics = getattr(item, "_perf_metrics", None)
+        if perf_metrics is not None and perf_metrics.total > 0:
+            perf_snapshot = perf_metrics.snapshot()
+            perf_samples = [
+                {
+                    "start_time": s.start_time,
+                    "end_time": s.end_time,
+                    "latency_ms": s.latency_ms,
+                    "success": s.success,
+                    "error": s.error,
+                }
+                for s in perf_metrics.samples
+            ]
+
+            # Extract thresholds from config if available
+            if _report_config is not None:
+                th = _report_config.thresholds
+                lp = _report_config.load_profile
+                thresholds = {
+                    "max_error_rate": th.max_error_rate,
+                    "max_p95_latency_ms": th.max_p95_latency_ms,
+                    "target_rate": lp.peak_images_per_second * lp.load_multiplier,
+                }
+
+        # Collect markers
+        markers = [m.name for m in item.iter_markers()
+                    if m.name not in ("parametrize", "usefixtures", "filterwarnings")]
+
+        # Error message
+        error_message = None
+        if test_outcome in ("failed", "error"):
+            error_message = report.longreprtext
+
+        _report_test_results.append(TestResult(
+            node_id=item.nodeid,
+            outcome=test_outcome,
+            duration=report.duration,
+            perf_snapshot=perf_snapshot,
+            perf_samples=perf_samples,
+            thresholds=thresholds,
+            markers=markers,
+            error_message=error_message,
+        ))
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Generate HTML report at session end."""
+    duration = time.time() - _report_session_start
+
+    config_summary = None
+    if _report_config is not None:
+        cfg = _report_config
+        config_summary = {
+            "endpoint": {
+                "host": cfg.endpoint.host,
+                "port": cfg.endpoint.port,
+                "remote_ae_title": cfg.endpoint.remote_ae_title,
+                "local_ae_title": cfg.endpoint.local_ae_title,
+            },
+            "load_profile": {
+                "peak_images_per_second": cfg.load_profile.peak_images_per_second,
+                "load_multiplier": cfg.load_profile.load_multiplier,
+                "test_duration_seconds": cfg.load_profile.test_duration_seconds,
+                "concurrency": cfg.load_profile.concurrency,
+            },
+            "thresholds": {
+                "max_error_rate": f"{cfg.thresholds.max_error_rate:.1%}",
+                "max_p95_latency_ms": f"{cfg.thresholds.max_p95_latency_ms:.0f} ms",
+                "max_p95_latency_ms_short": f"{cfg.thresholds.max_p95_latency_ms_short:.0f} ms",
+            },
+            "dataset": {
+                "dicom_root_dir": str(cfg.dataset.dicom_root_dir),
+                "recursive": cfg.dataset.recursive,
+            },
+        }
+
+    report_data = ReportData(
+        timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        duration=duration,
+        platform_info=f"Python {sys.version.split()[0]} on {platform.system()} {platform.release()}",
+        test_results=_report_test_results,
+        config_summary=config_summary,
+    )
+
+    html_content = generate_html_report(report_data)
+    report_path = project_root / "test_report.html"
+    report_path.write_text(html_content, encoding="utf-8")
+    print(f"\n{'=' * 60}")
+    print(f"HTML test report: {report_path}")
+    print(f"{'=' * 60}")
