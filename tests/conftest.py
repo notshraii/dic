@@ -496,6 +496,9 @@ def pytest_sessionfinish(session, exitstatus):
     html_content = generate_html_report(report_data)
     report_path = project_root / "test_report.html"
     report_path.write_text(html_content, encoding="utf-8")
-    print(f"\n{'=' * 60}")
-    print(f"HTML test report: {report_path}")
-    print(f"{'=' * 60}")
+    file_url = report_path.as_uri()
+    tw = session.config.get_terminal_writer()
+    tw.line()
+    tw.sep("=", "Test Execution Report")
+    tw.line(f" {file_url}")
+    tw.sep("=")

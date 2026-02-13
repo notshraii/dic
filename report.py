@@ -816,13 +816,11 @@ def _render_header(data: ReportData) -> str:
     duration_fmt = f"{data.duration:.1f}s" if data.duration < 60 else f"{data.duration / 60:.1f}m"
     return f"""
     <div class="header">
-        <h1>DICOM Test Report</h1>
+        <h1>Test Execution Report</h1>
         <div class="header-meta">
             <span>{_esc(data.timestamp)}</span>
             <span>|</span>
             <span>Duration: {duration_fmt}</span>
-            <span>|</span>
-            <span>{_esc(data.platform_info)}</span>
         </div>
     </div>
     """
@@ -1102,7 +1100,7 @@ def generate_html_report(data: ReportData) -> str:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DICOM Test Report - {_esc(data.timestamp)}</title>
+    <title>Test Execution Report - {_esc(data.timestamp)}</title>
     {_render_css()}
 </head>
 <body>
