@@ -10,6 +10,8 @@ import pytest
 from pathlib import Path
 from typing import List
 
+from pydicom.uid import generate_uid
+
 from metrics import PerfMetrics
 from tests.conftest import verify_study_arrived
 
@@ -158,6 +160,68 @@ def test_send_variable_batch_sizes(
     
     avg_latency = metrics.avg_latency_ms
     print(f"Batch of {batch_size}: avg latency {avg_latency:.2f}ms")
+
+
+# ============================================================================
+# Example 4b: One study with a large number of images
+# ============================================================================
+
+# Minimum number of images in one study to consider "large" for this test
+_STUDY_LARGE_IMAGE_COUNT = 20
+
+
+@pytest.mark.integration
+def test_send_one_study_with_many_images(
+    dicom_sender,
+    dicom_files: List[Path],
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
+):
+    """
+    Send a single study containing a large number of images (same StudyInstanceUID).
+
+    Verifies Compass accepts and stores one study with many instances.
+    Uses small files from the dataset to keep runtime reasonable.
+    Skips if fewer than _STUDY_LARGE_IMAGE_COUNT files are available.
+    """
+    from data_loader import load_dataset
+
+    if len(dicom_files) < _STUDY_LARGE_IMAGE_COUNT:
+        pytest.skip(
+            f"Need at least {_STUDY_LARGE_IMAGE_COUNT} DICOM files, found {len(dicom_files)}"
+        )
+
+    # Use first N files (prefer smaller for speed; take first N from sorted list)
+    test_files = dicom_files[:_STUDY_LARGE_IMAGE_COUNT]
+    study_uid = generate_uid()
+
+    print(f"\nSending one study with {len(test_files)} images (StudyInstanceUID: {study_uid[:40]}...)")
+
+    for i, file in enumerate(test_files, 1):
+        ds = load_dataset(file)
+        ds.StudyInstanceUID = study_uid
+        ds.SeriesInstanceUID = generate_uid()
+        ds.SOPInstanceUID = generate_uid()
+        dicom_sender._send_single_dataset(ds, metrics)
+
+    assert metrics.total == len(test_files), f"Expected {len(test_files)} sends, got {metrics.total}"
+    assert metrics.successes == len(test_files), f"Some sends failed: {metrics.failures} failures"
+    assert metrics.error_rate == 0, f"Error rate too high: {metrics.error_rate:.1%}"
+
+    # C-FIND verification: study exists and has expected instance count
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    assert cfind_study is not None, "Study not found in Compass after send"
+
+    instances = cfind_study.get("NumberOfStudyRelatedInstances")
+    if instances is not None:
+        count = int(instances)
+        assert count >= len(test_files), (
+            f"Expected >= {len(test_files)} instances in study, C-FIND returned {count}"
+        )
+        print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
+
+    print(f"[SUCCESS] One study with {len(test_files)} images sent and verified")
 
 
 # ============================================================================
