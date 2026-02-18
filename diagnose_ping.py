@@ -25,13 +25,22 @@ if dotenv_path.exists():
 from config import DicomEndpointConfig
 
 
-def tcp_reachable(host: str, port: int, timeout: float = 5.0) -> bool:
-    """Check if host:port accepts TCP connections."""
+def tcp_reachable(host: str, port: int, timeout: float = 5.0):
+    """
+    Try to open TCP connection to host:port.
+    Returns (True, None) on success, (False, error_message) on failure.
+    """
     try:
         with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except (socket.timeout, socket.error, OSError):
-        return False
+            return True, None
+    except socket.timeout:
+        return False, "Connection timed out (no response from host)"
+    except ConnectionRefusedError:
+        return False, "Connection refused (nothing listening on that port)"
+    except OSError as e:
+        return False, str(e)
+    except (socket.error, Exception) as e:
+        return False, str(e)
 
 
 def main() -> int:
@@ -45,14 +54,20 @@ def main() -> int:
 
     # Step 1: TCP reachability
     print("Step 1: TCP connectivity to {}:{}...".format(cfg.host, cfg.port))
-    if not tcp_reachable(cfg.host, cfg.port):
+    ok, err = tcp_reachable(cfg.host, cfg.port)
+    if not ok:
         print("  FAILED: Cannot open TCP connection.")
+        if err:
+            print("  Error: {}".format(err))
         print("  Possible causes:")
         print("    - Compass DICOM service not running on this host/port")
-        print("    - Firewall blocking the port")
-        print("    - Wrong COMPASS_HOST or COMPASS_PORT")
-        print("    - VPN or network path down")
-        print("  Try: telnet {} {}  (or nc -zv {} {})".format(cfg.host, cfg.port, cfg.host, cfg.port))
+        print("    - Firewall blocking the port (Windows Firewall, corporate, or server-side)")
+        print("    - Wrong COMPASS_HOST or COMPASS_PORT in .env")
+        print("    - VPN required but not connected (or wrong network)")
+        print("  On Windows, from PowerShell try:")
+        print("    Test-NetConnection -ComputerName {} -Port {}".format(cfg.host, cfg.port))
+        print("  Or enable telnet (Control Panel > Programs > Turn Windows features on > Telnet Client), then:")
+        print("    telnet {} {}".format(cfg.host, cfg.port))
         return 1
     print("  OK: TCP connection succeeded.")
     print()
