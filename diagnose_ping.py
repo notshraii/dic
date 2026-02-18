@@ -35,16 +35,24 @@ def tcp_reachable(host: str, port: int, timeout: float = 5.0):
             return True, None
     except socket.timeout:
         return False, "Connection timed out (no response from host)"
-    except ConnectionRefusedError:
-        return False, "Connection refused (nothing listening on that port)"
+    except ConnectionRefusedError as e:
+        return False, "Connection refused (nothing listening on that port). errno={}".format(getattr(e, "errno", getattr(e, "winerror", "?")))
     except OSError as e:
-        return False, str(e)
+        errno = getattr(e, "errno", "")
+        winerror = getattr(e, "winerror", "")
+        parts = [str(e)] if str(e) else []
+        if errno is not None and errno != "":
+            parts.append("errno={}".format(errno))
+        if winerror is not None and winerror != "":
+            parts.append("winerror={}".format(winerror))
+        return False, " ".join(parts) or type(e).__name__
     except (socket.error, Exception) as e:
-        return False, str(e)
+        return False, str(e) or "{}".format(type(e).__name__)
 
 
 def main() -> int:
     cfg = DicomEndpointConfig.from_env()
+    print("diagnose_ping.py (run from project root so .env is used)")
     print("Configuration (from .env):")
     print(f"  COMPASS_HOST       = {cfg.host}")
     print(f"  COMPASS_PORT       = {cfg.port}")
@@ -57,17 +65,15 @@ def main() -> int:
     ok, err = tcp_reachable(cfg.host, cfg.port)
     if not ok:
         print("  FAILED: Cannot open TCP connection.")
-        if err:
-            print("  Error: {}".format(err))
+        print("  Detail: {}".format(err or "Unknown"))
+        print("  (If Detail is empty, pull latest diagnose_ping.py from the repo.)")
         print("  Possible causes:")
         print("    - Compass DICOM service not running on this host/port")
         print("    - Firewall blocking the port (Windows Firewall, corporate, or server-side)")
         print("    - Wrong COMPASS_HOST or COMPASS_PORT in .env")
         print("    - VPN required but not connected (or wrong network)")
-        print("  On Windows, from PowerShell try:")
-        print("    Test-NetConnection -ComputerName {} -Port {}".format(cfg.host, cfg.port))
-        print("  Or enable telnet (Control Panel > Programs > Turn Windows features on > Telnet Client), then:")
-        print("    telnet {} {}".format(cfg.host, cfg.port))
+        print("  On Windows (PowerShell): Test-NetConnection -ComputerName {} -Port {}".format(cfg.host, cfg.port))
+        print("  If that also fails: check VPN, .env host/port, and ask admin to confirm Compass is listening and firewall allows you.")
         return 1
     print("  OK: TCP connection succeeded.")
     print()
