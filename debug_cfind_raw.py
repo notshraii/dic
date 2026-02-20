@@ -87,15 +87,33 @@ study_uid = sys.argv[1] if len(sys.argv) > 1 else None
 queries = []
 
 if study_uid:
-    ds = Dataset()
-    ds.QueryRetrieveLevel = "STUDY"
-    ds.StudyInstanceUID = study_uid
-    ds.PatientID = ""
-    ds.PatientName = ""
-    ds.StudyDate = ""
-    ds.AccessionNumber = ""
-    ds.NumberOfStudyRelatedInstances = ""
-    queries.append((f"StudyInstanceUID={study_uid}", ds))
+    # Query 1: UID only at STUDY level
+    ds1 = Dataset()
+    ds1.QueryRetrieveLevel = "STUDY"
+    ds1.StudyInstanceUID = study_uid
+    ds1.PatientID = ""
+    ds1.PatientName = ""
+    ds1.StudyDate = ""
+    ds1.AccessionNumber = ""
+    ds1.NumberOfStudyRelatedInstances = ""
+    queries.append((f"STUDY level, StudyInstanceUID={study_uid}", ds1))
+
+    # Query 2: UID + PatientID at STUDY level
+    ds2 = Dataset()
+    ds2.QueryRetrieveLevel = "STUDY"
+    ds2.StudyInstanceUID = study_uid
+    ds2.PatientID = "11043207"
+    ds2.PatientName = ""
+    ds2.StudyDate = ""
+    ds2.AccessionNumber = ""
+    queries.append((f"STUDY level, StudyInstanceUID + PatientID=11043207", ds2))
+
+    # Query 3: PATIENT level query
+    ds3 = Dataset()
+    ds3.QueryRetrieveLevel = "PATIENT"
+    ds3.PatientID = "11043207"
+    ds3.PatientName = ""
+    queries.append(("PATIENT level, PatientID=11043207", ds3))
 else:
     # Query 1: today's date
     ds1 = Dataset()
@@ -126,6 +144,13 @@ else:
     ds3.PatientName = ""
     ds3.AccessionNumber = ""
     queries.append(("PatientID=11043207 (anonymized test patient)", ds3))
+
+    # Query 4: PATIENT level
+    ds4 = Dataset()
+    ds4.QueryRetrieveLevel = "PATIENT"
+    ds4.PatientID = "11043207"
+    ds4.PatientName = ""
+    queries.append(("PATIENT level, PatientID=11043207", ds4))
 
 for label, ds in queries:
     print(f"\n{'='*60}")
