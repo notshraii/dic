@@ -52,16 +52,28 @@ class CompassCFindConfig:
     def from_env(cls) -> "CompassCFindConfig":
         """Load configuration from environment variables.
         C-FIND uses CFIND_HOST, CFIND_PORT, CFIND_AE_TITLE when set (separate from
-        Compass C-STORE). If not set, falls back to COMPASS_HOST, COMPASS_PORT, COMPASS_AE_TITLE.
+        Compass C-STORE). Local AE for C-FIND is the same as the active route:
+        COMPASS_ROUTE (HTM_GI/HTM_OPH/HTM_ORTHO) -> LOCAL_AE_HTM_*. Set
+        CFIND_LOCAL_AE_TITLE only to override (e.g. a dedicated query AE).
         """
         host = os.getenv("CFIND_HOST") or os.getenv("COMPASS_HOST", "roelbc200a.mayo.edu")
         port = int(os.getenv("CFIND_PORT") or os.getenv("COMPASS_PORT", "11112"))
         remote_ae = os.getenv("CFIND_AE_TITLE") or os.getenv("COMPASS_AE_TITLE", "COMPASS")
+        local_ae = os.getenv("CFIND_LOCAL_AE_TITLE")
+        if not local_ae:
+            route = os.getenv("COMPASS_ROUTE")
+            if route == "HTM_GI":
+                local_ae = os.getenv("LOCAL_AE_HTM_GI")
+            elif route == "HTM_OPH":
+                local_ae = os.getenv("LOCAL_AE_HTM_OPH")
+            elif route == "HTM_ORTHO":
+                local_ae = os.getenv("LOCAL_AE_HTM_ORTHO")
+            local_ae = local_ae or os.getenv("LOCAL_AE_TITLE", "QUERY_SCU")
         return cls(
             host=host,
             port=port,
             remote_ae_title=remote_ae,
-            local_ae_title=os.getenv("CFIND_LOCAL_AE_TITLE") or os.getenv("LOCAL_AE_TITLE", "QUERY_SCU"),
+            local_ae_title=local_ae,
             query_model=os.getenv("COMPASS_QUERY_MODEL", "STUDY"),
             timeout=int(os.getenv("COMPASS_QUERY_TIMEOUT", "30")),
         )

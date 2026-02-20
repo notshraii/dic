@@ -76,6 +76,7 @@ LOCAL_AE_TITLE=TEST_SENDER
 # CFIND_HOST=im.example.org
 # CFIND_PORT=104
 # CFIND_AE_TITLE=IM_SCP
+# C-FIND uses the active route's local AE (LOCAL_AE_HTM_* per COMPASS_ROUTE). Override only if needed:
 # CFIND_LOCAL_AE_TITLE=QUERY_SCU
 
 
