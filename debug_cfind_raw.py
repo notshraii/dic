@@ -84,8 +84,9 @@ def run_cfind(ds: Dataset, model_name: str, model_sop):
 
 study_uid = sys.argv[1] if len(sys.argv) > 1 else None
 
+queries = []
+
 if study_uid:
-    print(f"\nQuerying for specific StudyInstanceUID: {study_uid}")
     ds = Dataset()
     ds.QueryRetrieveLevel = "STUDY"
     ds.StudyInstanceUID = study_uid
@@ -94,24 +95,51 @@ if study_uid:
     ds.StudyDate = ""
     ds.AccessionNumber = ""
     ds.NumberOfStudyRelatedInstances = ""
+    queries.append((f"StudyInstanceUID={study_uid}", ds))
 else:
-    print(f"\nBroad query: all studies for today ({datetime.now().strftime('%Y%m%d')})")
-    ds = Dataset()
-    ds.QueryRetrieveLevel = "STUDY"
-    ds.StudyDate = datetime.now().strftime("%Y%m%d")
-    ds.StudyInstanceUID = ""
-    ds.PatientID = ""
-    ds.PatientName = ""
-    ds.AccessionNumber = ""
+    # Query 1: today's date
+    ds1 = Dataset()
+    ds1.QueryRetrieveLevel = "STUDY"
+    ds1.StudyDate = datetime.now().strftime("%Y%m%d")
+    ds1.StudyInstanceUID = ""
+    ds1.PatientID = ""
+    ds1.PatientName = ""
+    ds1.AccessionNumber = ""
+    queries.append((f"StudyDate={ds1.StudyDate} (today)", ds1))
 
-for name, sop in [
-    ("Study Root", StudyRootQueryRetrieveInformationModelFind),
-    ("Patient Root", PatientRootQueryRetrieveInformationModelFind),
-]:
-    results = run_cfind(ds, name, sop)
-    if results:
-        print(f"\n  {name} returned {len(results)} result(s) - stopping here.")
-        break
-else:
-    print("\nNo results from either query model.")
-    print("Check the debug output above for the server's raw response.")
+    # Query 2: no date filter at all (finds all studies visible to this AE)
+    ds2 = Dataset()
+    ds2.QueryRetrieveLevel = "STUDY"
+    ds2.StudyDate = ""
+    ds2.StudyInstanceUID = ""
+    ds2.PatientID = ""
+    ds2.PatientName = ""
+    ds2.AccessionNumber = ""
+    queries.append(("No date filter (all studies)", ds2))
+
+    # Query 3: by anonymized PatientID used in tests
+    ds3 = Dataset()
+    ds3.QueryRetrieveLevel = "STUDY"
+    ds3.PatientID = "11043207"
+    ds3.StudyDate = ""
+    ds3.StudyInstanceUID = ""
+    ds3.PatientName = ""
+    ds3.AccessionNumber = ""
+    queries.append(("PatientID=11043207 (anonymized test patient)", ds3))
+
+for label, ds in queries:
+    print(f"\n{'='*60}")
+    print(f"Query: {label}")
+    print(f"{'='*60}")
+    found = False
+    for name, sop in [
+        ("Study Root", StudyRootQueryRetrieveInformationModelFind),
+        ("Patient Root", PatientRootQueryRetrieveInformationModelFind),
+    ]:
+        results = run_cfind(ds, name, sop)
+        if results:
+            print(f"\n  {name} returned {len(results)} result(s).")
+            found = True
+            break
+    if not found:
+        print(f"  No results for: {label}")
