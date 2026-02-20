@@ -6,6 +6,7 @@ Global pytest fixtures for DICOM testing with automatic configuration and datase
 
 import os
 import platform
+import socket
 import sys
 import time
 from datetime import datetime
@@ -143,7 +144,14 @@ def verify_study_arrived(
     while True:
         attempts += 1
         print(f"  [CFIND VERIFY] Attempt {attempts}: sending C-FIND query...")
-        result = cfind_client.find_study_by_uid(study_uid)
+        try:
+            result = cfind_client.find_study_by_uid(study_uid)
+        except socket.gaierror as e:
+            raise AssertionError(
+                f"C-FIND host could not be resolved: '{cfg.host}' (getaddrinfo failed). "
+                f"Check .env: set CFIND_HOST or COMPASS_HOST to a valid hostname or IP. "
+                f"If using a separate C-FIND server, ensure CFIND_HOST is correct."
+            ) from e
         if result is not None:
             study_dict = cfind_client.dataset_to_dict(result)
             elapsed = time.time() - start
