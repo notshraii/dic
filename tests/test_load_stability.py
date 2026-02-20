@@ -53,13 +53,14 @@ def test_load_stability_3x_peak(
     ), f"p95 latency too high: {p95} ms > {max_p95_latency} ms"
 
     # Sample-based C-FIND verification (up to 5 unique StudyInstanceUIDs)
-    unique_uids = list({
-        str(ds.StudyInstanceUID)
+    uid_to_patient = {
+        str(ds.StudyInstanceUID): str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         for ds in dicom_datasets
         if hasattr(ds, 'StudyInstanceUID')
-    })[:5]
-    if unique_uids:
-        print(f"\n[C-FIND VERIFICATION] Verifying sample of {len(unique_uids)} study UIDs")
-        for uid in unique_uids:
-            verify_study_arrived(cfind_client, uid, perf_config)
+    }
+    sample_uids = list(uid_to_patient.keys())[:5]
+    if sample_uids:
+        print(f"\n[C-FIND VERIFICATION] Verifying sample of {len(sample_uids)} study UIDs")
+        for uid in sample_uids:
+            verify_study_arrived(cfind_client, uid, perf_config, patient_id=uid_to_patient[uid])
 

@@ -66,17 +66,11 @@ def test_called_aet_routing(
     1. Loads a DICOM file
     2. Generates unique study UID for tracking
     3. Sends to specified called AE Title
-    4. Verifies send succeeds
-    5. Documents study UID for manual verification
+    4. Verifies send succeeds via C-FIND query
 
     To add more called AE Titles:
     - Add entries to CALLED_AET_TEST_CASES list above
     - Run: pytest tests/test_calling_aet_routing.py -v -s
-
-    Manual verification required:
-    - Query Compass for each StudyInstanceUID
-    - Verify the called AET was correctly targeted
-    - Verify appropriate routing rules were applied
     """
     called_aet = test_case['aet']
 
@@ -132,7 +126,8 @@ def test_called_aet_routing(
 
         # C-FIND verification
         print(f"\n[C-FIND VERIFICATION]")
-        study = verify_study_arrived(cfind_client, test_study_uid, perf_config)
+        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+        study = verify_study_arrived(cfind_client, test_study_uid, perf_config, patient_id=patient_id)
         if study:
             print(f"  [OK] Study confirmed in Compass for called AET: {called_aet}")
 
@@ -235,6 +230,7 @@ def test_multiple_aets_batch_send(
                 'file': file.name,
                 'called_aet': called_aet,
                 'study_uid': ds.StudyInstanceUID,
+                'patient_id': str(ds.PatientID) if hasattr(ds, 'PatientID') else None,
                 'success': metrics.successes == 1,
                 'latency': metrics.avg_latency_ms
             }
@@ -279,7 +275,7 @@ def test_multiple_aets_batch_send(
         for r in results:
             if r['called_aet'] not in verified_aets and r['success']:
                 verified_aets.add(r['called_aet'])
-                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config)
+                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config, patient_id=r.get('patient_id'))
                 if study:
                     print(f"  [OK] Verified sample study for AET {r['called_aet']}")
 
@@ -359,8 +355,9 @@ def test_unknown_called_aet(
         # C-FIND verification (non-failing — documents whether Compass stored it)
         if metrics.successes == 1 and cfind_client is not None:
             print(f"\n[C-FIND VERIFICATION (informational)]")
+            patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
             try:
-                study = verify_study_arrived(cfind_client, test_study_uid, perf_config)
+                study = verify_study_arrived(cfind_client, test_study_uid, perf_config, patient_id=patient_id)
                 if study:
                     print(f"  Study WAS stored in Compass despite unknown AET")
             except AssertionError:
@@ -430,6 +427,7 @@ def test_called_aet_with_modality_combinations(
                 'aet': called_aet,
                 'modality': modality,
                 'study_uid': ds.StudyInstanceUID,
+                'patient_id': str(ds.PatientID) if hasattr(ds, 'PatientID') else None,
                 'success': metrics.successes == 1,
                 'latency': metrics.avg_latency_ms
             }
@@ -450,7 +448,7 @@ def test_called_aet_with_modality_combinations(
         print(f"\n[C-FIND VERIFICATION]")
         for r in results:
             if r['success']:
-                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config)
+                study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config, patient_id=r.get('patient_id'))
                 if study:
                     print(f"  [OK] Verified {r['aet']} + {modality}")
 

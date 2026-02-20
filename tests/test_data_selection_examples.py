@@ -46,7 +46,8 @@ def test_send_large_file(dicom_sender, large_dicom_file: Path, metrics: PerfMetr
     # C-FIND verification
     study_uid = str(ds.StudyInstanceUID) if hasattr(ds, 'StudyInstanceUID') else None
     if study_uid:
-        verify_study_arrived(cfind_client, study_uid, perf_config)
+        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+        verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
 
 
 # ============================================================================
@@ -66,12 +67,13 @@ def test_send_batch_small_files(dicom_sender, small_dicom_files: List[Path], met
 
     print(f"Sending batch of {len(small_dicom_files)} small files...")
 
-    sent_uids = []
+    uid_to_patient: dict = {}
     for file in small_dicom_files:
         ds = load_dataset(file)
         dicom_sender._send_single_dataset(ds, metrics)
         if hasattr(ds, 'StudyInstanceUID'):
-            sent_uids.append(str(ds.StudyInstanceUID))
+            uid = str(ds.StudyInstanceUID)
+            uid_to_patient[uid] = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
 
     expected_count = len(small_dicom_files)
     assert metrics.total == expected_count, f"Expected {expected_count} sends, got {metrics.total}"
@@ -80,8 +82,8 @@ def test_send_batch_small_files(dicom_sender, small_dicom_files: List[Path], met
     print(f"Successfully sent {metrics.successes} files")
 
     # C-FIND verification (sample up to 5)
-    for uid in list(dict.fromkeys(sent_uids))[:5]:
-        verify_study_arrived(cfind_client, uid, perf_config)
+    for uid in list(uid_to_patient.keys())[:5]:
+        verify_study_arrived(cfind_client, uid, perf_config, patient_id=uid_to_patient[uid])
 
 
 # ============================================================================
@@ -112,12 +114,13 @@ def test_send_by_modality(
 
     print(f"Testing {modality} modality with {len(files)} files")
 
-    sent_uids = []
+    uid_to_patient: dict = {}
     for file in files:
         ds = load_dataset(file)
         dicom_sender._send_single_dataset(ds, metrics)
         if hasattr(ds, 'StudyInstanceUID'):
-            sent_uids.append(str(ds.StudyInstanceUID))
+            uid = str(ds.StudyInstanceUID)
+            uid_to_patient[uid] = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
 
     assert metrics.successes == len(files), f"{modality}: Some sends failed"
     assert metrics.error_rate == 0, f"{modality}: Error rate too high"
@@ -125,8 +128,8 @@ def test_send_by_modality(
     print(f"{modality}: All {len(files)} files sent successfully")
 
     # C-FIND verification (sample up to 3)
-    for uid in list(dict.fromkeys(sent_uids))[:3]:
-        verify_study_arrived(cfind_client, uid, perf_config)
+    for uid in list(uid_to_patient.keys())[:3]:
+        verify_study_arrived(cfind_client, uid, perf_config, patient_id=uid_to_patient[uid])
 
 
 # ============================================================================
@@ -198,11 +201,13 @@ def test_send_one_study_with_many_images(
 
     print(f"\nSending one study with {len(test_files)} images (StudyInstanceUID: {study_uid[:40]}...)")
 
+    last_patient_id = None
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
         ds.StudyInstanceUID = study_uid
         ds.SeriesInstanceUID = generate_uid()
         ds.SOPInstanceUID = generate_uid()
+        last_patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         dicom_sender._send_single_dataset(ds, metrics)
 
     assert metrics.total == len(test_files), f"Expected {len(test_files)} sends, got {metrics.total}"
@@ -210,7 +215,7 @@ def test_send_one_study_with_many_images(
     assert metrics.error_rate == 0, f"Error rate too high: {metrics.error_rate:.1%}"
 
     # C-FIND verification: study exists and has expected instance count
-    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=last_patient_id)
     assert cfind_study is not None, "Study not found in Compass after send"
 
     instances = cfind_study.get("NumberOfStudyRelatedInstances")

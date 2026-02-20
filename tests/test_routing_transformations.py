@@ -194,9 +194,11 @@ def test_routing_transformation(
             
             # Automated verification via C-FIND
             print(f"\n[STEP 2: AUTOMATED VERIFICATION VIA C-FIND]")
+            patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
             query_and_verify(
                 cfind_client, perf_config,
                 str(test_dataset.StudyInstanceUID), test_case['expected'],
+                patient_id=patient_id,
             )
             
             print(f"\n[RESULT: TEST COMPLETE]")
@@ -215,7 +217,7 @@ def test_routing_transformation(
 # Automated Verification via C-FIND
 # ============================================================================
 
-def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attributes: dict):
+def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attributes: dict, patient_id: str = None):
     """
     Query Compass via C-FIND and verify transformations were applied.
 
@@ -224,10 +226,11 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
         perf_config: TestConfig with timeout / poll settings.
         study_uid: StudyInstanceUID to query.
         expected_attributes: Dict of expected attribute values (snake_case keys).
+        patient_id: Optional PatientID for fallback PATIENT-level C-FIND query.
     """
     print(f"\n  [AUTOMATED VERIFICATION VIA C-FIND]")
 
-    study_data = verify_study_arrived(cfind_client, study_uid, perf_config)
+    study_data = verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
 
     if study_data is None:
         # verify_study_arrived returned None (CFIND_VERIFY=false)

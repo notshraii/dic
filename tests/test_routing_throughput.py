@@ -102,8 +102,8 @@ def test_routing_throughput_under_peak_plus(
     target_peak = perf_config.load_profile.peak_images_per_second * multiplier
     duration = perf_config.load_profile.test_duration_seconds
 
-    # Thread-safe collection of sample UIDs for verification
-    _sampled_uids = []
+    # Thread-safe collection of sample (uid, patient_id) pairs for verification
+    _sampled_pairs: list = []
     _sample_lock = threading.Lock()
     _max_samples = 20
 
@@ -112,11 +112,12 @@ def test_routing_throughput_under_peak_plus(
     def anonymized_dataset_generator():
         for ds in itertools.cycle(dicom_datasets):
             variant = create_anonymized_variant(ds)
-            # Collect a sample of UIDs for post-test verification
-            if len(_sampled_uids) < _max_samples:
+            # Collect a sample of UID+PatientID pairs for post-test verification
+            if len(_sampled_pairs) < _max_samples:
                 with _sample_lock:
-                    if len(_sampled_uids) < _max_samples:
-                        _sampled_uids.append(str(variant.StudyInstanceUID))
+                    if len(_sampled_pairs) < _max_samples:
+                        patient_id = str(variant.PatientID) if hasattr(variant, 'PatientID') else None
+                        _sampled_pairs.append((str(variant.StudyInstanceUID), patient_id))
             yield variant
 
     print(f"\n[INFO] Starting throughput test with {multiplier}x multiplier")
@@ -157,9 +158,9 @@ def test_routing_throughput_under_peak_plus(
     print("Throughput snapshot:", snapshot)
 
     # Sample-based C-FIND verification (up to 5 from collected UIDs)
-    sample_uids = _sampled_uids[:5]
-    if sample_uids:
-        print(f"\n[C-FIND VERIFICATION] Verifying sample of {len(sample_uids)} study UIDs")
-        for uid in sample_uids:
-            verify_study_arrived(cfind_client, uid, perf_config)
+    sample_pairs = _sampled_pairs[:5]
+    if sample_pairs:
+        print(f"\n[C-FIND VERIFICATION] Verifying sample of {len(sample_pairs)} study UIDs")
+        for uid, patient_id in sample_pairs:
+            verify_study_arrived(cfind_client, uid, perf_config, patient_id=patient_id)
 

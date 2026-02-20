@@ -42,7 +42,7 @@ def test_populate_blank_study_date(
     1. Load DICOM file
     2. Remove StudyDate and StudyTime tags
     3. Send to Compass
-    4. Manual verification: Query for study and check date was populated
+    4. C-FIND verification: Query for study and check date was populated
     """
     ds = load_dataset(single_dicom_file)
     
@@ -90,7 +90,8 @@ def test_populate_blank_study_date(
     print(f"\n{'='*70}")
     print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
     if study:
         cfind_date = study.get('StudyDate', '')
         if cfind_date and cfind_date.strip():
@@ -121,7 +122,7 @@ def test_preserve_existing_study_date(
     Test Steps:
     1. Send file with valid StudyDate/Time
     2. Verify send succeeds
-    3. Manual verification: Confirm date was not changed
+    3. C-FIND verification: Confirm date was not changed
     """
     ds = load_dataset(single_dicom_file)
     
@@ -150,7 +151,8 @@ def test_preserve_existing_study_date(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
     if study:
         cfind_date = study.get('StudyDate', '')
         if cfind_date and cfind_date.strip() == test_study_date:
@@ -184,7 +186,7 @@ def test_iims_accession_number_generation(
     2. Set AccessionNumber to empty string
     3. Send to Compass
     4. Verify send succeeds
-    5. Manual verification: Check IIMS logs and query for study
+    5. C-FIND verification: Query for study and check AccessionNumber
     """
     ds = load_dataset(single_dicom_file)
     
@@ -212,7 +214,8 @@ def test_iims_accession_number_generation(
     print(f"\n{'='*70}")
     print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
     if study:
         acc = study.get('AccessionNumber', '')
         if acc and acc.strip():
@@ -267,7 +270,8 @@ def test_pass_device_accession_number(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
     if study:
         acc = study.get('AccessionNumber', '')
         if acc and acc.strip() == test_accession:
@@ -338,7 +342,8 @@ def test_accession_number_edge_cases(
             print(f"  Result: SUCCESS")
             print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
             # C-FIND verification
-            study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+            patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+            study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
             if study:
                 acc = study.get('AccessionNumber', '')
                 print(f"  C-FIND AccessionNumber: '{acc}'")
@@ -394,7 +399,7 @@ def test_blank_patient_name_handling(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id='TEST-ID-12345')
     if study:
         pn = study.get('PatientName', '')
         if pn and pn.strip():
@@ -514,7 +519,8 @@ def test_missing_modality_tag(
     
     # C-FIND verification (informational)
     if metrics.successes == 1:
-        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config)
+        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
         if study:
             print(f"  [INFO] Study stored in Compass despite missing Modality")
 
@@ -541,8 +547,7 @@ def test_data_validation_summary(dicom_sender):
     print(f"  3. Accession number preservation")
     print(f"  4. Patient demographic edge cases")
     print(f"  5. Missing required tags")
-    print(f"\nAll tests send files and document expected behavior.")
-    print(f"Manual verification is required for most cases.")
+    print(f"\nAll tests send files, verify via C-FIND, and document expected behavior.")
     print(f"\nRun individual tests for detailed results:")
     print(f"  pytest tests/test_data_validation.py -v -s")
     

@@ -57,7 +57,7 @@ def test_send_with_2min_pause_between_files(
     print(f"{'='*70}")
     print(f"  Total estimated time: {len(test_files) * delay_seconds / 60:.1f} minutes")
     
-    sent_uids = []
+    uid_to_patient: dict = {}
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
 
@@ -65,7 +65,7 @@ def test_send_with_2min_pause_between_files(
         ds.StudyInstanceUID = generate_uid()
         ds.SeriesInstanceUID = generate_uid()
         ds.SOPInstanceUID = generate_uid()
-        sent_uids.append(str(ds.StudyInstanceUID))
+        uid_to_patient[str(ds.StudyInstanceUID)] = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
 
         print(f"\n[{i}/{len(test_files)}] Sending file: {file.name}")
         print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
@@ -97,8 +97,8 @@ def test_send_with_2min_pause_between_files(
 
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    for uid in sent_uids:
-        verify_study_arrived(cfind_client, uid, perf_config)
+    for uid, patient_id in uid_to_patient.items():
+        verify_study_arrived(cfind_client, uid, perf_config, patient_id=patient_id)
 
     print(f"\n[SUCCESS] All {len(test_files)} files sent and verified with 2-min delays")
 
@@ -124,7 +124,7 @@ def test_mcie_slow_send_one_at_a_time(
     1. Set calling AET to MCIE variant
     2. Send files one at a time with 30-second delays
     3. Verify all files sent successfully
-    4. Manual verification: Check MIDIA and InfinityView for files
+    4. C-FIND verification: Confirm study arrived with correct instance count
     """
     delay_seconds = 30  # 30 seconds between files
     test_files = small_dicom_files[:5]  # Limit to 5 files
@@ -169,7 +169,8 @@ def test_mcie_slow_send_one_at_a_time(
         
         # C-FIND verification
         print(f"\n[C-FIND VERIFICATION]")
-        cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+        cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
         if cfind_study:
             instances = cfind_study.get('NumberOfStudyRelatedInstances')
             if instances is not None:
@@ -207,7 +208,7 @@ def test_send_duplicate_study_multiple_times(
     2. Send exact same study again (same UIDs)
     3. Send third time
     4. Verify all sends succeed
-    5. Manual verification: Check that multiple entries exist
+    5. C-FIND verification: Confirm study arrived
     """
     num_sends = 3
     
@@ -265,7 +266,8 @@ def test_send_duplicate_study_multiple_times(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    cfind_study = verify_study_arrived(cfind_client, str(fixed_study_uid), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    cfind_study = verify_study_arrived(cfind_client, str(fixed_study_uid), perf_config, patient_id=patient_id)
     if cfind_study:
         instances = cfind_study.get('NumberOfStudyRelatedInstances')
         if instances is not None:
@@ -338,7 +340,8 @@ def test_resend_after_modifications(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
-    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
     if cfind_study:
         pn = cfind_study.get('PatientName', '')
         print(f"  [INFO] PatientName in Compass: {pn}")
@@ -395,7 +398,8 @@ def test_send_with_variable_delays(
 
     # C-FIND verification for the shared study
     print(f"\n[C-FIND VERIFICATION]")
-    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config)
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
     if cfind_study:
         instances = cfind_study.get('NumberOfStudyRelatedInstances')
         if instances is not None:
