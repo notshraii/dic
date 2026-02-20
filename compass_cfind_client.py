@@ -61,13 +61,16 @@ class CompassCFindConfig:
         remote_ae = os.getenv("CFIND_AE_TITLE") or os.getenv("COMPASS_AE_TITLE", "COMPASS")
         local_ae = os.getenv("CFIND_LOCAL_AE_TITLE")
         if not local_ae:
+            # Use the Compass route AE (REMOTE_AE_HTM_*) as the C-FIND calling AE.
+            # The IM server sees studies as arriving from Compass (e.g. LB-HTM-GI),
+            # so querying with that same AE title is required to get results back.
             route = os.getenv("COMPASS_ROUTE")
             if route == "HTM_GI":
-                local_ae = os.getenv("LOCAL_AE_HTM_GI")
+                local_ae = os.getenv("REMOTE_AE_HTM_GI")
             elif route == "HTM_OPH":
-                local_ae = os.getenv("LOCAL_AE_HTM_OPH")
+                local_ae = os.getenv("REMOTE_AE_HTM_OPH")
             elif route == "HTM_ORTHO":
-                local_ae = os.getenv("LOCAL_AE_HTM_ORTHO")
+                local_ae = os.getenv("REMOTE_AE_HTM_ORTHO")
             local_ae = local_ae or os.getenv("LOCAL_AE_TITLE", "QUERY_SCU")
         return cls(
             host=host,
