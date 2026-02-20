@@ -150,27 +150,34 @@ class CompassCFindClient:
     def find_study_by_uid(self, study_uid: str) -> Optional[Dataset]:
         """
         Find a study by Study Instance UID.
-        
-        Args:
-            study_uid: Study Instance UID to search for
-            
-        Returns:
-            DICOM dataset with study information, or None if not found
+        Tries Study Root then Patient Root with a minimal query (StudyInstanceUID only).
+        Wildcards like PatientID='*' are intentionally omitted because many IM servers
+        reject or ignore them when a specific StudyInstanceUID is provided.
         """
-        # Minimal query — only request fields Compass is known to support
-        ds = Dataset()
-        ds.QueryRetrieveLevel = "STUDY"
-        ds.StudyInstanceUID = study_uid
-        ds.PatientID = "*"
-        ds.PatientName = ""
-        ds.StudyDate = ""
-        ds.AccessionNumber = ""
-        ds.StudyDescription = ""
+        original_model = self.config.query_model
 
-        logger.info(f"Querying for study: {study_uid}")
-        results = self._execute_find(ds)
+        for model in ("STUDY", "PATIENT"):
+            self.config.query_model = model
+            ds = Dataset()
+            ds.QueryRetrieveLevel = "STUDY"
+            ds.StudyInstanceUID = study_uid
+            ds.PatientID = ""
+            ds.PatientName = ""
+            ds.StudyDate = ""
+            ds.AccessionNumber = ""
+            ds.NumberOfStudyRelatedInstances = ""
 
-        return results[0] if results else None
+            logger.info(f"Querying for study (model={model}): {study_uid}")
+            try:
+                results = self._execute_find(ds)
+                if results:
+                    self.config.query_model = original_model
+                    return results[0]
+            except Exception as e:
+                logger.warning(f"C-FIND with model={model} failed: {e}")
+
+        self.config.query_model = original_model
+        return None
     
     def find_studies_by_patient_id(
         self,
