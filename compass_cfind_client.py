@@ -77,7 +77,7 @@ class CompassCFindConfig:
             port=port,
             remote_ae_title=remote_ae,
             local_ae_title=local_ae,
-            query_model=os.getenv("COMPASS_QUERY_MODEL", "STUDY"),
+            query_model=os.getenv("COMPASS_QUERY_MODEL", "PATIENT"),
             timeout=int(os.getenv("COMPASS_QUERY_TIMEOUT", "30")),
         )
 
@@ -159,7 +159,7 @@ class CompassCFindClient:
         """
         original_model = self.config.query_model
 
-        for model in ("STUDY", "PATIENT"):
+        for model in ("PATIENT", "STUDY"):
             self.config.query_model = model
             ds = Dataset()
             ds.QueryRetrieveLevel = "STUDY"
