@@ -56,8 +56,12 @@ All settings via `.env` file or environment variables (see `env_template.txt`). 
 |----------|---------|---------|
 | `COMPASS_HOST` | `127.0.0.1` | Compass server hostname |
 | `COMPASS_PORT` | `11112` | DICOM port |
-| `COMPASS_AE_TITLE` | `COMPASS` | Remote AE Title |
-| `LOCAL_AE_TITLE` | `PERF_SENDER` | Local AE Title |
+| `COMPASS_ROUTE` | (none) | Active route: `HTM_GI`, `HTM_OPH`, or `HTM_ORTHO`; each has its own remote/local AE pair |
+| `REMOTE_AE_HTM_GI`, `LOCAL_AE_HTM_GI` | (none) | LB-HTM-GI route: Called AE / Calling AE |
+| `REMOTE_AE_HTM_OPH`, `LOCAL_AE_HTM_OPH` | (none) | LB-HTM-OPH route |
+| `REMOTE_AE_HTM_ORTHO`, `LOCAL_AE_HTM_ORTHO` | (none) | LB-HTM-ORTHO route |
+| `COMPASS_AE_TITLE` | `COMPASS` | Fallback remote AE when `COMPASS_ROUTE` unset |
+| `LOCAL_AE_TITLE` | `PERF_SENDER` | Fallback local AE when `COMPASS_ROUTE` unset |
 | `DICOM_ROOT_DIR` | `./dicom_samples` | Test data directory |
 | `PEAK_IMAGES_PER_SECOND` | `50` | Baseline performance rate |
 | `LOAD_MULTIPLIER` | `3.0` | Load scaling factor |

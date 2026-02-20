@@ -1,0 +1,105 @@
+# Compass Database Configuration Template
+# Copy this file to .env and fill in your actual credentials
+# NEVER commit .env to version control!
+
+# ============================================================================
+# Database Connection (Option 1: Direct Database Access)
+# ============================================================================
+
+# Server and Database
+COMPASS_DB_SERVER=ROCFDN019Q
+COMPASS_DB_NAME=ODM
+COMPASS_DB_PORT=1433
+
+# Authentication - Choose ONE method:
+
+# Method A: SQL Server Authentication (username/password)
+# COMPASS_DB_USER=your_username
+# COMPASS_DB_PASSWORD=your_password
+# COMPASS_DB_WINDOWS_AUTH=false
+
+# Method B: Windows Authentication (uses your Windows domain credentials)
+# COMPASS_DB_WINDOWS_AUTH=true
+
+# ODBC Driver (usually this default works)
+# COMPASS_DB_DRIVER=ODBC Driver 17 for SQL Server
+
+
+# ============================================================================
+# API Connection (Option 2: REST API - Preferred if available)
+# ============================================================================
+
+# Base URL for Compass web interface/API
+COMPASS_API_URL=http://roelbc200a.mayo.edu:10400
+
+# Authentication - if required by API
+# COMPASS_API_USER=your_username
+# COMPASS_API_PASSWORD=your_password
+
+# Or use API key if provided
+# COMPASS_API_KEY=your_api_key_here
+
+# API Settings
+COMPASS_API_TIMEOUT=30
+COMPASS_API_VERIFY_SSL=true
+
+
+# ============================================================================
+# DICOM Connection (for sending test data - C-STORE to Compass)
+# ============================================================================
+
+COMPASS_HOST=roelbc200a.mayo.edu
+COMPASS_PORT=11112
+
+# Three routes, each with its own remote (Called) and local (Calling) AE title.
+# Set COMPASS_ROUTE=HTM_GI|HTM_OPH|HTM_ORTHO to choose which route is used.
+# If COMPASS_ROUTE is unset, COMPASS_AE_TITLE + LOCAL_AE_TITLE are used as fallback.
+
+COMPASS_ROUTE=HTM_GI
+REMOTE_AE_HTM_GI=LB-HTM-GI
+LOCAL_AE_HTM_GI=HTM-GI
+REMOTE_AE_HTM_OPH=LB-HTM-OPH
+LOCAL_AE_HTM_OPH=HTM-OPH
+REMOTE_AE_HTM_ORTHO=LB-HTM-ORTHO
+LOCAL_AE_HTM_ORTHO=HTM-ORTHO
+
+# Fallback when COMPASS_ROUTE is not set or route vars are missing
+COMPASS_AE_TITLE=COMPASS
+LOCAL_AE_TITLE=TEST_SENDER
+
+# ============================================================================
+# C-FIND / Query Server (optional - if different from Compass)
+# ============================================================================
+# Set these when C-FIND runs on a different host (e.g. IM/Query server).
+# If unset, compass_cfind_client.py uses COMPASS_HOST/PORT/AE_TITLE above.
+
+# CFIND_HOST=im.example.org
+# CFIND_PORT=104
+# CFIND_AE_TITLE=IM_SCP
+# CFIND_LOCAL_AE_TITLE=QUERY_SCU
+
+
+# ============================================================================
+# Notes
+# ============================================================================
+
+# 1. START WITH API: Try the API approach first (compass_api_client.py)
+#    - More secure
+#    - Officially supported
+#    - Better for production use
+#
+# 2. FALLBACK TO DATABASE: If no API is available
+#    - Request read-only credentials from DBA
+#    - Use compass_db_query.py
+#
+# 3. DISCOVERY: If you don't have credentials yet
+#    - Run: python test_compass_connection.py --mode discover
+#    - Follow browser inspection instructions
+#    - Contact your administrator
+#
+# 4. SECURITY: 
+#    - Never commit credentials to git
+#    - Add .env to .gitignore
+#    - Use read-only credentials when possible
+#    - Follow Mayo Clinic security policies
+

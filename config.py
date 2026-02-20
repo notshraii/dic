@@ -7,9 +7,9 @@ Configuration management for all Compass DICOM tests using environment variables
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Tuple
 
 
 # ============================================================================
@@ -49,10 +49,29 @@ def _env_float(name: str, default: float) -> float:
 # ============================================================================
 
 
+def _routes_from_env() -> Dict[str, Tuple[str, str]]:
+    """Build dict of named routes from env: HTM_GI, HTM_OPH, HTM_ORTHO."""
+    routes: Dict[str, Tuple[str, str]] = {}
+    for name, remote_key, local_key in (
+        ("HTM_GI", "REMOTE_AE_HTM_GI", "LOCAL_AE_HTM_GI"),
+        ("HTM_OPH", "REMOTE_AE_HTM_OPH", "LOCAL_AE_HTM_OPH"),
+        ("HTM_ORTHO", "REMOTE_AE_HTM_ORTHO", "LOCAL_AE_HTM_ORTHO"),
+    ):
+        remote = _env_str(remote_key)
+        local = _env_str(local_key)
+        if remote and local:
+            routes[name] = (remote, local)
+    return routes
+
+
 @dataclass
 class DicomEndpointConfig:
     """
     DICOM connection configuration - WHERE to send data.
+    
+    Supports three named routes (HTM_GI, HTM_OPH, HTM_ORTHO). Set COMPASS_ROUTE
+    to choose the active one; each route has REMOTE_AE_* and LOCAL_AE_*.
+    If COMPASS_ROUTE is unset, falls back to COMPASS_AE_TITLE + LOCAL_AE_TITLE.
     
     Used by: All tests
     """
@@ -60,14 +79,25 @@ class DicomEndpointConfig:
     port: int
     remote_ae_title: str  # Compass's AE Title (called AET)
     local_ae_title: str   # Default calling AE Title (can be overridden per test)
+    routes: Dict[str, Tuple[str, str]] = field(default_factory=dict)  # name -> (remote_ae, local_ae)
 
     @classmethod
     def from_env(cls) -> "DicomEndpointConfig":
+        host = _env_str("COMPASS_HOST", "127.0.0.1")
+        port = _env_int("COMPASS_PORT", 11112)
+        routes = _routes_from_env()
+        active_route = _env_str("COMPASS_ROUTE")
+        if active_route and active_route in routes:
+            remote_ae_title, local_ae_title = routes[active_route]
+        else:
+            remote_ae_title = _env_str("COMPASS_AE_TITLE", "COMPASS")
+            local_ae_title = _env_str("LOCAL_AE_TITLE", "PERF_SENDER") or "PERF_SENDER"
         return cls(
-            host=_env_str("COMPASS_HOST", "127.0.0.1"),
-            port=_env_int("COMPASS_PORT", 11112),
-            remote_ae_title=_env_str("COMPASS_AE_TITLE", "COMPASS"),
-            local_ae_title=_env_str("LOCAL_AE_TITLE", "PERF_SENDER") or "PERF_SENDER",
+            host=host,
+            port=port,
+            remote_ae_title=remote_ae_title,
+            local_ae_title=local_ae_title,
+            routes=routes,
         )
 
 

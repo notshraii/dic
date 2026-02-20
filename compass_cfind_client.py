@@ -50,12 +50,18 @@ class CompassCFindConfig:
     
     @classmethod
     def from_env(cls) -> "CompassCFindConfig":
-        """Load configuration from environment variables."""
+        """Load configuration from environment variables.
+        C-FIND uses CFIND_HOST, CFIND_PORT, CFIND_AE_TITLE when set (separate from
+        Compass C-STORE). If not set, falls back to COMPASS_HOST, COMPASS_PORT, COMPASS_AE_TITLE.
+        """
+        host = os.getenv("CFIND_HOST") or os.getenv("COMPASS_HOST", "roelbc200a.mayo.edu")
+        port = int(os.getenv("CFIND_PORT") or os.getenv("COMPASS_PORT", "11112"))
+        remote_ae = os.getenv("CFIND_AE_TITLE") or os.getenv("COMPASS_AE_TITLE", "COMPASS")
         return cls(
-            host=os.getenv("COMPASS_HOST", "roelbc200a.mayo.edu"),
-            port=int(os.getenv("COMPASS_PORT", "11112")),
-            remote_ae_title=os.getenv("COMPASS_AE_TITLE", "COMPASS"),
-            local_ae_title=os.getenv("LOCAL_AE_TITLE", "QUERY_SCU"),
+            host=host,
+            port=port,
+            remote_ae_title=remote_ae,
+            local_ae_title=os.getenv("CFIND_LOCAL_AE_TITLE") or os.getenv("LOCAL_AE_TITLE", "QUERY_SCU"),
             query_model=os.getenv("COMPASS_QUERY_MODEL", "STUDY"),
             timeout=int(os.getenv("COMPASS_QUERY_TIMEOUT", "30")),
         )
