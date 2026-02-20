@@ -132,11 +132,16 @@ def verify_study_arrived(
 
     timeout = perf_config.integration.cfind_timeout
     interval = perf_config.integration.cfind_poll_interval
+    initial_delay = perf_config.integration.cfind_initial_delay
     cfg = cfind_client.config
     print(f"  [CFIND VERIFY] C-FIND enabled. Using C-FIND server: {cfg.host}:{cfg.port}")
     print(f"  [CFIND VERIFY] Called AE: {cfg.remote_ae_title}, Calling AE: {cfg.local_ae_title}")
     print(f"  [CFIND VERIFY] Polling for StudyInstanceUID: {study_uid}")
-    print(f"  [CFIND VERIFY] Timeout: {timeout}s, poll interval: {interval}s")
+    print(f"  [CFIND VERIFY] Initial delay: {initial_delay}s, timeout: {timeout}s, poll interval: {interval}s")
+
+    if initial_delay > 0:
+        print(f"  [CFIND VERIFY] Waiting {initial_delay}s before first query (IM indexing delay)...")
+        time.sleep(initial_delay)
 
     start = time.time()
     attempts = 0

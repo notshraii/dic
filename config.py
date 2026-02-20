@@ -171,8 +171,9 @@ class IntegrationTestConfig:
     """
     test_dicom_file: Optional[str] = None  # Specific file for anonymize test
     cfind_verify: bool = True              # Enable C-FIND verification after sends
-    cfind_timeout: int = 15                # Poll timeout in seconds
-    cfind_poll_interval: float = 2.0       # Poll interval in seconds
+    cfind_initial_delay: float = 5.0      # Seconds to wait before first C-FIND attempt
+    cfind_timeout: int = 60               # Poll timeout in seconds
+    cfind_poll_interval: float = 5.0      # Poll interval in seconds
 
     @classmethod
     def from_env(cls) -> "IntegrationTestConfig":
@@ -180,8 +181,9 @@ class IntegrationTestConfig:
         return cls(
             test_dicom_file=_env_str("TEST_DICOM_FILE", None),
             cfind_verify=cfind_verify_str.lower() not in ("false", "0", "no"),
-            cfind_timeout=_env_int("CFIND_TIMEOUT", 15),
-            cfind_poll_interval=_env_float("CFIND_POLL_INTERVAL", 2.0),
+            cfind_initial_delay=_env_float("CFIND_INITIAL_DELAY", 5.0),
+            cfind_timeout=_env_int("CFIND_TIMEOUT", 60),
+            cfind_poll_interval=_env_float("CFIND_POLL_INTERVAL", 5.0),
         )
 
 
