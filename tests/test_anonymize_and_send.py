@@ -228,10 +228,10 @@ def test_anonymize_and_send_single_file(
     assert latency < 5000, f"Latency {latency:.2f}ms exceeds threshold of 5000ms"
     print(f"  [OK] Average latency: {latency:.2f} ms")
     
-    # C-FIND verification
+    # C-FIND verification (uses C-FIND against IM server; see [CFIND VERIFY] logs)
     from tests.conftest import verify_study_arrived
     print(f"\n{'='*60}")
-    print("STEP 4: C-FIND VERIFICATION")
+    print("STEP 4: C-FIND VERIFICATION (querying C-FIND server for study)")
     print(f"{'='*60}")
     study = verify_study_arrived(cfind_client, new_uids['study_uid'], perf_config)
     if study:
@@ -303,4 +303,31 @@ def test_anonymize_and_send_from_shared_drive(
     finally:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
+
+
+@pytest.mark.integration
+def test_cfind_verification_fails_for_wrong_study_uid(
+    cfind_client,
+    perf_config,
+):
+    """
+    Negative test: C-FIND verification must fail when querying for a non-existent study.
+    Confirms that the C-FIND check is actually running and that a wrong StudyInstanceUID
+    does not pass.
+    """
+    if cfind_client is None:
+        pytest.skip("C-FIND verification disabled (CFIND_VERIFY=false); cannot run negative C-FIND test")
+
+    from tests.conftest import verify_study_arrived
+
+    wrong_study_uid = "1.2.3.99999.nonexistent.wrong.study.uid"
+    print(f"\n[CFIND NEGATIVE] Querying for non-existent study: {wrong_study_uid}")
+    print("[CFIND NEGATIVE] Expecting C-FIND to return no match and assertion to fail...")
+
+    with pytest.raises(AssertionError) as exc_info:
+        verify_study_arrived(cfind_client, wrong_study_uid, perf_config)
+
+    assert "not found" in str(exc_info.value)
+    assert wrong_study_uid in str(exc_info.value)
+    print(f"[CFIND NEGATIVE] C-FIND correctly failed for wrong study UID: {exc_info.value}")
 

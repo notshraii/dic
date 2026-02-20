@@ -131,7 +131,9 @@ def verify_study_arrived(
 
     timeout = perf_config.integration.cfind_timeout
     interval = perf_config.integration.cfind_poll_interval
-
+    cfg = cfind_client.config
+    print(f"  [CFIND VERIFY] C-FIND enabled. Using C-FIND server: {cfg.host}:{cfg.port}")
+    print(f"  [CFIND VERIFY] Called AE: {cfg.remote_ae_title}, Calling AE: {cfg.local_ae_title}")
     print(f"  [CFIND VERIFY] Polling for StudyInstanceUID: {study_uid}")
     print(f"  [CFIND VERIFY] Timeout: {timeout}s, poll interval: {interval}s")
 
@@ -140,20 +142,23 @@ def verify_study_arrived(
 
     while True:
         attempts += 1
+        print(f"  [CFIND VERIFY] Attempt {attempts}: sending C-FIND query...")
         result = cfind_client.find_study_by_uid(study_uid)
         if result is not None:
             study_dict = cfind_client.dataset_to_dict(result)
             elapsed = time.time() - start
-            print(f"  [CFIND VERIFY] Study found after {elapsed:.1f}s ({attempts} attempts)")
+            print(f"  [CFIND VERIFY] Study found after {elapsed:.1f}s ({attempts} attempt(s))")
             for key, val in study_dict.items():
                 print(f"    {key}: {val}")
             return study_dict
 
         elapsed = time.time() - start
         if elapsed >= timeout:
+            print(f"  [CFIND VERIFY] Study not found after {attempts} attempt(s) in {timeout}s (timeout)")
             break
         remaining = timeout - elapsed
         sleep_time = min(interval, remaining)
+        print(f"  [CFIND VERIFY] Attempt {attempts}: no match, retrying in {sleep_time:.1f}s...")
         if sleep_time > 0:
             time.sleep(sleep_time)
 
