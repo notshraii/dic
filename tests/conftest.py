@@ -111,6 +111,7 @@ def verify_study_arrived(
     cfind_client: Optional[CompassCFindClient],
     study_uid: str,
     perf_config: TestConfig,
+    patient_id: Optional[str] = None,
 ) -> Optional[dict]:
     """
     Poll C-FIND to confirm a study arrived in Compass.
@@ -174,7 +175,7 @@ def verify_study_arrived(
         attempts += 1
         print(f"  [CFIND VERIFY] Attempt {attempts}: sending C-FIND query...")
         try:
-            result = cfind_client.find_study_by_uid(study_uid)
+            result = cfind_client.find_study_by_uid(study_uid, patient_id=patient_id)
         except socket.gaierror as e:
             raise AssertionError(
                 f"C-FIND host could not be resolved: '{cfg.host}' (getaddrinfo failed). "

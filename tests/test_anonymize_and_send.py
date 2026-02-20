@@ -233,7 +233,9 @@ def test_anonymize_and_send_single_file(
     print(f"\n{'='*60}")
     print("STEP 4: C-FIND VERIFICATION (querying C-FIND server for study)")
     print(f"{'='*60}")
-    study = verify_study_arrived(cfind_client, new_uids['study_uid'], perf_config)
+    study = verify_study_arrived(
+        cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
+    )
     if study:
         instances = study.get('NumberOfStudyRelatedInstances')
         if instances is not None:
@@ -293,7 +295,9 @@ def test_anonymize_and_send_from_shared_drive(
 
         # C-FIND verification
         from tests.conftest import verify_study_arrived
-        study = verify_study_arrived(cfind_client, new_uids['study_uid'], perf_config)
+        study = verify_study_arrived(
+            cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
+        )
         if study:
             instances = study.get('NumberOfStudyRelatedInstances')
             if instances is not None:

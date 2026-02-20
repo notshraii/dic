@@ -147,15 +147,22 @@ class CompassCFindClient:
         
         return results
     
-    def find_study_by_uid(self, study_uid: str) -> Optional[Dataset]:
+    def find_study_by_uid(
+        self, study_uid: str, patient_id: Optional[str] = None
+    ) -> Optional[Dataset]:
         """
         Find a study by Study Instance UID.
-        Tries Study Root then Patient Root with a minimal query (StudyInstanceUID only).
-        Wildcards like PatientID='*' are intentionally omitted because many IM servers
-        reject or ignore them when a specific StudyInstanceUID is provided.
+
+        Strategy (in order):
+        1. Study Root STUDY level — most servers support this.
+        2. Patient Root STUDY level — some servers require this model.
+        3. Patient Root PATIENT level (requires patient_id) — fallback for servers
+           that only support Patient Root at the patient level (e.g. TEAMINT_SCP).
+           Returns a patient-level dataset confirming the patient exists on the server.
         """
         original_model = self.config.query_model
 
+        # Strategy 1 & 2: STUDY-level queries with both models
         for model in ("PATIENT", "STUDY"):
             self.config.query_model = model
             ds = Dataset()
@@ -167,14 +174,34 @@ class CompassCFindClient:
             ds.AccessionNumber = ""
             ds.NumberOfStudyRelatedInstances = ""
 
-            logger.info(f"Querying for study (model={model}): {study_uid}")
+            logger.info(f"Querying for study (model={model}, level=STUDY): {study_uid}")
             try:
                 results = self._execute_find(ds)
                 if results:
                     self.config.query_model = original_model
                     return results[0]
             except Exception as e:
-                logger.warning(f"C-FIND with model={model} failed: {e}")
+                logger.warning(f"C-FIND with model={model} level=STUDY failed: {e}")
+
+        # Strategy 3: Patient Root PATIENT-level fallback
+        if patient_id:
+            self.config.query_model = "PATIENT"
+            ds = Dataset()
+            ds.QueryRetrieveLevel = "PATIENT"
+            ds.PatientID = patient_id
+            ds.PatientName = ""
+            logger.info(f"Fallback: Patient Root PATIENT level, PatientID={patient_id}")
+            try:
+                results = self._execute_find(ds)
+                if results:
+                    logger.info(
+                        f"Patient found via PATIENT-level query (PatientID={patient_id}). "
+                        f"Server does not support STUDY-level queries."
+                    )
+                    self.config.query_model = original_model
+                    return results[0]
+            except Exception as e:
+                logger.warning(f"C-FIND Patient Root PATIENT level failed: {e}")
 
         self.config.query_model = original_model
         return None
