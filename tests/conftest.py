@@ -143,6 +143,30 @@ def verify_study_arrived(
         print(f"  [CFIND VERIFY] Waiting {initial_delay}s before first query (IM indexing delay)...")
         time.sleep(initial_delay)
 
+    # Diagnostic: check if the calling AE can retrieve ANY studies (today).
+    # Zero results here means the calling AE is not authorized to query this server.
+    from datetime import datetime as _dt
+    from pydicom.dataset import Dataset as _Dataset
+    _diag = _Dataset()
+    _diag.QueryRetrieveLevel = "STUDY"
+    _diag.StudyDate = _dt.now().strftime("%Y%m%d")
+    _diag.StudyInstanceUID = ""
+    _diag.PatientID = ""
+    try:
+        _broad = cfind_client._execute_find(_diag)
+        if not _broad:
+            print(
+                f"  [CFIND VERIFY] WARNING: Broad query for today's studies returned 0 results.\n"
+                f"  This usually means the calling AE '{cfg.local_ae_title}' is NOT registered\n"
+                f"  as a permitted Query SCU on '{cfg.remote_ae_title}' ({cfg.host}:{cfg.port}).\n"
+                f"  Ask the IM server admin to add '{cfg.local_ae_title}' as an authorized Query SCU,\n"
+                f"  or set CFIND_LOCAL_AE_TITLE in .env to a calling AE that already has permission."
+            )
+        else:
+            print(f"  [CFIND VERIFY] Diagnostic: calling AE is authorized ({len(_broad)} study/studies visible today)")
+    except Exception as _e:
+        print(f"  [CFIND VERIFY] Diagnostic broad query failed: {_e}")
+
     start = time.time()
     attempts = 0
 
