@@ -11,6 +11,10 @@ from datetime import datetime
 
 import pytest
 
+def _accession(suffix: str) -> str:
+    """Generate a unique AccessionNumber per test run using timestamp + suffix."""
+    return f"TRFM-{datetime.now().strftime('%Y%m%d%H%M%S')}-{suffix}"
+
 from data_loader import load_dataset
 from metrics import PerfMetrics
 from tests.conftest import verify_study_arrived
@@ -30,6 +34,7 @@ TRANSFORMATION_TEST_CASES = [
         'input': {
             'modality': 'OPV',
             'series_description': 'GPA',
+            'accession_number': _accession('OPV-GPA'),
         },
         'expected': {
             'study_description': 'Visual Fields (VF) GPA',
@@ -42,6 +47,7 @@ TRANSFORMATION_TEST_CASES = [
         'input': {
             'modality': 'OPV',
             'series_description': 'SFA',
+            'accession_number': _accession('OPV-SFA'),
         },
         'expected': {
             'study_description': 'Visual Fields (VF) SFA',
@@ -54,6 +60,7 @@ TRANSFORMATION_TEST_CASES = [
         'input': {
             'modality': 'OPV',
             'series_description': 'Mixed Analysis',
+            'accession_number': _accession('OPV-MIX'),
         },
         'expected': {
             'study_description': 'Visual Fields (VF)',
@@ -65,6 +72,7 @@ TRANSFORMATION_TEST_CASES = [
         'route': 'HTM_OPH',
         'input': {
             'modality': 'OPT',
+            'accession_number': _accession('OPT'),
         },
         'expected': {
             'study_description': 'Optical Coherence Tomography (OCT)',
@@ -76,6 +84,7 @@ TRANSFORMATION_TEST_CASES = [
         'route': 'HTM_OPH',
         'input': {
             'modality': 'OT',
+            'accession_number': _accession('OT'),
         },
         'expected': {
             'study_description': 'IOL Master (OT)',
@@ -87,6 +96,7 @@ TRANSFORMATION_TEST_CASES = [
         'route': 'HTM_OPH',
         'input': {
             'modality': 'DOC',
+            'accession_number': _accession('DOC'),
         },
         'expected': {
             'study_description': 'OCT and VF Combined Report',
@@ -100,6 +110,7 @@ TRANSFORMATION_TEST_CASES = [
     #     'input': {
     #         'modality': 'CT',
     #         'series_description': 'BRAIN',
+    #         'accession_number': _accession('YOUR-SUFFIX'),
     #         # Add any other DICOM attributes in snake_case
     #     },
     #     'expected': {
