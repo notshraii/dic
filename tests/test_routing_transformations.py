@@ -26,7 +26,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_GPA_VisualFields',
         'description': 'OPV modality with GPA series description should set Visual Fields study description',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'OPV',
             'series_description': 'GPA',
@@ -38,7 +38,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_SFA_VisualFields',
         'description': 'OPV modality with SFA series description should set Visual Fields study description',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'OPV',
             'series_description': 'SFA',
@@ -50,7 +50,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPV_Mixed_VisualFields',
         'description': 'OPV modality with mixed series description (GPA or SFA) should set Visual Fields',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'OPV',
             'series_description': 'Mixed Analysis',
@@ -62,7 +62,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OPT_OCT',
         'description': 'OPT modality for Optical Coherence Tomography',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'OPT',
         },
@@ -73,7 +73,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'OT_IOLMaster',
         'description': 'OT modality for IOL Master measurements',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'OT',
         },
@@ -84,7 +84,7 @@ TRANSFORMATION_TEST_CASES = [
     {
         'name': 'DOC_Combined',
         'description': 'DOC modality for combined OCT and VF report',
-        'aet': 'ULTRA_MCR_FORUM',
+        'route': 'HTM_OPH',
         'input': {
             'modality': 'DOC',
         },
@@ -96,7 +96,7 @@ TRANSFORMATION_TEST_CASES = [
     # {
     #     'name': 'TestCaseName',
     #     'description': 'Human-readable description',
-    #     'aet': 'SOURCE_AE_TITLE',
+    #     'route': 'HTM_OPH',  # Route name from .env (HTM_GI, HTM_OPH, HTM_ORTHO)
     #     'input': {
     #         'modality': 'CT',
     #         'series_description': 'BRAIN',
@@ -154,9 +154,21 @@ def test_routing_transformation(
     test_file_path, test_dataset = test_dicom_with_attributes(**test_case['input'])
     
     try:
+        # Resolve AE titles from route config
+        route_name = test_case['route']
+        route_aes = dicom_sender.endpoint.routes.get(route_name)
+        assert route_aes is not None, (
+            f"Route '{route_name}' not found in config. "
+            f"Available routes: {list(dicom_sender.endpoint.routes.keys())}. "
+            f"Check .env for REMOTE_AE_{route_name} and LOCAL_AE_{route_name}."
+        )
+        remote_ae, local_ae = route_aes
+
         # Display test configuration
         print(f"\n[CONFIGURATION]")
-        print(f"  Source AE Title: {test_case['aet']}")
+        print(f"  Route: {route_name}")
+        print(f"  Called AE (remote): {remote_ae}")
+        print(f"  Calling AE (local): {local_ae}")
         print(f"\n[INPUT ATTRIBUTES]")
         for attr_name, attr_value in test_case['input'].items():
             display_name = ''.join(word.capitalize() for word in attr_name.split('_'))
@@ -172,9 +184,11 @@ def test_routing_transformation(
         print(f"  SeriesInstanceUID: {test_dataset.SeriesInstanceUID}")
         print(f"  SOPInstanceUID: {test_dataset.SOPInstanceUID}")
         
-        # Override AE title for this test
-        original_ae_title = dicom_sender.endpoint.local_ae_title
-        dicom_sender.endpoint.local_ae_title = test_case['aet']
+        # Override both AE titles to match the test case's route
+        original_local_ae = dicom_sender.endpoint.local_ae_title
+        original_remote_ae = dicom_sender.endpoint.remote_ae_title
+        dicom_sender.endpoint.local_ae_title = local_ae
+        dicom_sender.endpoint.remote_ae_title = remote_ae
         
         try:
             # Send to Compass
@@ -204,8 +218,8 @@ def test_routing_transformation(
             print(f"\n[RESULT: TEST COMPLETE]")
             
         finally:
-            # Restore original AE title
-            dicom_sender.endpoint.local_ae_title = original_ae_title
+            dicom_sender.endpoint.local_ae_title = original_local_ae
+            dicom_sender.endpoint.remote_ae_title = original_remote_ae
     
     finally:
         # Cleanup temp file
@@ -285,9 +299,12 @@ def test_all_transformations_summary(
     print(f"\nTest cases:")
     
     for i, test_case in enumerate(TRANSFORMATION_TEST_CASES, 1):
+        route_name = test_case['route']
+        route_aes = dicom_sender.endpoint.routes.get(route_name, (None, None))
+        remote_ae, local_ae = route_aes
         print(f"\n{i}. {test_case['name']}")
         print(f"   Description: {test_case['description']}")
-        print(f"   AE Title: {test_case['aet']}")
+        print(f"   Route: {route_name} (called={remote_ae}, calling={local_ae})")
         print(f"   Input: {', '.join(f'{k}={v}' for k, v in test_case['input'].items())}")
         print(f"   Expected: {', '.join(f'{k}={v}' for k, v in test_case['expected'].items())}")
     
@@ -312,7 +329,7 @@ def add_test_case_template():
     new_test_case = {
         'name': 'YourTestCaseName',  # Short identifier (no spaces)
         'description': 'Human-readable description of what this tests',
-        'aet': 'SOURCE_AE_TITLE',  # The sending AE title
+        'route': 'HTM_OPH',  # Route name from .env (HTM_GI, HTM_OPH, HTM_ORTHO)
         'input': {
             # Input DICOM attributes (snake_case)
             'modality': 'XX',
