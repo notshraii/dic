@@ -1,108 +1,78 @@
-# DICOM Testing Framework - Engineering Guide
+# DICOM Automation Suite
 
-This guide helps new engineers understand, use, and extend the Compass DICOM testing framework.
+DICOM performance and load testing framework for Laurel Bridge Compass, with a standalone GUI/CLI tool for updating DICOM tags. Built on pytest, pynetdicom, and pydicom.
+
+---
 
 ## Table of Contents
 
-1. [Framework Overview](#framework-overview)
-2. [Architecture](#architecture)
-3. [Setup and Getting Started](#setup-and-getting-started)
-4. [How to Add a New Test](#how-to-add-a-new-test)
-5. [Test Types and Patterns](#test-types-and-patterns)
-6. [Configuration Management](#configuration-management)
-7. [Data Management](#data-management)
-8. [Best Practices](#best-practices)
-9. [Troubleshooting](#troubleshooting)
+- [Overview](#overview)
+- [Project Structure](#project-structure)
+- [Setup](#setup)
+- [Configuration](#configuration)
+- [Running Tests](#running-tests)
+- [Test Suite](#test-suite)
+- [DICOM Tag Updater](#dicom-tag-updater)
+- [C-FIND Query Client](#c-find-query-client)
+- [HTML Test Reports](#html-test-reports)
+- [Building the Executable](#building-the-executable)
+- [Architecture](#architecture)
 
-## Framework Overview
+---
 
-This is a pytest-based DICOM performance and validation testing framework for Laurel Bridge Compass. It provides:
+## Overview
 
-- **Load testing** at various traffic levels
-- **Routing validation** for different AE titles
-- **Tag transformation verification**
-- **Failure mode simulation**
-- **Data validation testing**
-- **Anonymization workflow testing**
+This project provides two main capabilities:
 
-### Key Features
+1. **Automated DICOM testing** -- A pytest-based test suite that sends DICOM images to a Laurel Bridge Compass router via C-STORE, measures performance (throughput, latency, error rate), and verifies delivery via C-FIND. Tests cover load/stress scenarios, routing transformations, failure modes, data validation, and AE title routing.
 
-- Environment-driven configuration
-- Automatic DICOM decompression
-- Thread-safe metrics collection
-- Intelligent test data selection
-- Comprehensive fixture ecosystem
+2. **DICOM Tag Updater** -- A Tkinter GUI application (also usable from CLI) for batch-updating DICOM tags across files in a folder. Generates unique StudyInstanceUID, AccessionNumber, and SeriesInstanceUID per run.
 
-## Architecture
+---
 
-### Core Components
+## Project Structure
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   config.py     │    │  data_loader.py │    │ dicom_sender.py │
-│ Configuration   │    │ File Discovery  │    │ Network Client  │
-│ Management      │    │ & Loading       │    │ & Transmission  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         └───────────────────────┼───────────────────────┘
-                                 │
-                    ┌─────────────────┐
-                    │   metrics.py    │
-                    │ Performance     │
-                    │ Tracking        │
-                    └─────────────────┘
+dicomAuto/
+|-- config.py                    # Centralized configuration (env vars + dataclasses)
+|-- data_loader.py               # DICOM file discovery and loading with auto-decompression
+|-- dicom_sender.py              # C-STORE client with concurrent sending
+|-- metrics.py                   # Thread-safe performance metrics collection
+|-- dcmutl.py                    # Low-level DICOM tag manipulation utilities
+|-- compass_cfind_client.py      # C-FIND query client for verifying delivery
+|-- report.py                    # HTML test report generator (Chart.js, dark theme)
+|-- update_dicom_tags.py         # GUI + CLI DICOM tag updater
+|-- build_exe.spec               # PyInstaller spec for building standalone executable
+|
+|-- tests/
+|   |-- conftest.py              # Shared fixtures, report hooks, data selection helpers
+|   |-- test_load_stability.py   # Load/stress tests at 3x peak
+|   |-- test_routing_throughput.py# Throughput tests at target images/sec
+|   |-- test_routing_transformations.py  # Tag transformation verification
+|   |-- test_data_validation.py  # Compass data handling edge cases
+|   |-- test_failure_modes.py    # Delays, duplicates, interruptions
+|   |-- test_calling_aet_routing.py     # AE title routing tests
+|   |-- test_anonymize_and_send.py      # PHI removal and send
+|   |-- test_update_dicom_tags.py       # Tag updater tool tests
+|   |-- test_data_selection_examples.py # Fixture usage examples
+|
+|-- dicom_samples/               # Test DICOM files (not committed)
+|-- .env                         # Environment configuration (not committed)
+|-- env_template.txt             # Template for .env
+|-- requirements.txt             # Python dependencies
+|-- pytest.ini                   # Pytest configuration and markers
 ```
 
-#### 1. Configuration System (`config.py`)
+---
 
-Manages all test settings through environment variables and dataclasses:
+## Setup
 
-- **DicomEndpointConfig**: Connection details (host, port, AE titles)
-- **LoadProfileConfig**: Performance test parameters
-- **DatasetConfig**: Test data locations
-- **PerformanceThresholdsConfig**: Pass/fail criteria
+### Prerequisites
 
-#### 2. Data Layer (`data_loader.py`)
+- Python 3.9+
+- Network access to a Laurel Bridge Compass server (for integration/load tests)
 
-Handles DICOM file operations:
-
-- Discovers DICOM files by magic string validation
-- Automatically decompresses JPEG/JPEG2000/RLE files
-- Ensures encoding consistency for transmission
-
-#### 3. Network Layer (`dicom_sender.py`)
-
-Manages DICOM communications:
-
-- Multi-threaded C-STORE transmission
-- C-ECHO connectivity checks
-- Rate limiting and load control
-
-#### 4. Metrics Collection (`metrics.py`)
-
-Thread-safe performance tracking:
-
-- Latency measurements (min/avg/p95)
-- Success/failure rates
-- Error categorization
-
-### Test Structure
-
-```
-tests/
-├── conftest.py              # Global fixtures and configuration
-├── test_load_stability.py   # Stress tests at 3x peak load
-├── test_routing_throughput.py # Rate-limited performance tests
-├── test_routing_transformations.py # Tag modification validation
-├── test_calling_aet_routing.py # AE Title routing tests
-├── test_data_validation.py # Data handling and edge cases
-├── test_failure_modes.py   # Resilience and error scenarios
-└── test_anonymize_and_send.py # Privacy workflow tests
-```
-
-## Setup and Getting Started
-
-### 1. Environment Setup
+### Installation
 
 ```bash
 # Clone the repository
@@ -112,662 +82,321 @@ cd dicomAuto
 # Install dependencies
 pip install -r requirements.txt
 
-# Generate test data
+# Copy the environment template and configure
+cp env_template.txt .env
+# Edit .env with your Compass server details
+```
+
+### Test Data
+
+Place DICOM files in the `dicom_samples/` directory (or set `DICOM_ROOT_DIR` in `.env`). Files are discovered recursively by validating the DICM magic string, so any valid DICOM file will be found regardless of extension.
+
+You can also generate sample files:
+
+```bash
 python3 create_diverse_dicom_samples.py
 ```
 
-### 2. Configuration
+---
 
-Create a `.env` file in the project root:
+## Configuration
 
-```env
-# Compass Connection
-COMPASS_HOST=your-compass-server.com
-COMPASS_PORT=11112
-COMPASS_AE_TITLE=COMPASS
-LOCAL_AE_TITLE=TEST_SENDER
+All settings are managed through environment variables, typically set in a `.env` file. See `env_template.txt` for the full template.
 
-# Test Data
-DICOM_ROOT_DIR=./dicom_samples
+### DICOM Connection (C-STORE)
 
-# Load Testing Parameters
-PEAK_IMAGES_PER_SECOND=50
-LOAD_MULTIPLIER=3.0
-LOAD_CONCURRENCY=8
-TEST_DURATION_SECONDS=60
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `COMPASS_HOST` | `127.0.0.1` | Compass server hostname |
+| `COMPASS_PORT` | `11112` | DICOM port |
+| `COMPASS_ROUTE` | _(none)_ | Active route: `HTM_GI`, `HTM_OPH`, or `HTM_ORTHO` |
 
-# Performance Thresholds
-MAX_ERROR_RATE=0.02
-MAX_P95_LATENCY_MS_SHORT=1500
-MAX_P95_LATENCY_MS=2000
-```
+### Route-Specific AE Titles
 
-### 3. Run Tests
+Each route has its own Called AE (remote) and Calling AE (local):
+
+| Route | Remote AE Variable | Local AE Variable |
+|-------|--------------------|--------------------|
+| HTM_GI | `REMOTE_AE_HTM_GI` | `LOCAL_AE_HTM_GI` |
+| HTM_OPH | `REMOTE_AE_HTM_OPH` | `LOCAL_AE_HTM_OPH` |
+| HTM_ORTHO | `REMOTE_AE_HTM_ORTHO` | `LOCAL_AE_HTM_ORTHO` |
+
+When `COMPASS_ROUTE` is unset, `COMPASS_AE_TITLE` and `LOCAL_AE_TITLE` are used as fallbacks.
+
+### C-FIND Verification
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CFIND_HOST` | _(uses COMPASS_HOST)_ | C-FIND server (if different from Compass) |
+| `CFIND_PORT` | _(uses COMPASS_PORT)_ | C-FIND port |
+| `CFIND_AE_TITLE` | _(uses COMPASS_AE_TITLE)_ | Called AE for queries |
+| `CFIND_VERIFY` | `true` | Enable/disable C-FIND verification after sends |
+| `CFIND_INITIAL_DELAY` | `5.0` | Seconds to wait before first C-FIND attempt |
+| `CFIND_TIMEOUT` | `60` | Total polling timeout in seconds |
+| `CFIND_POLL_INTERVAL` | `5.0` | Seconds between C-FIND retries |
+
+### Load Testing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PEAK_IMAGES_PER_SECOND` | `50` | Baseline performance rate |
+| `LOAD_MULTIPLIER` | `3.0` | Multiplier applied to peak rate for stress tests |
+| `LOAD_CONCURRENCY` | `8` | Thread pool size for concurrent sends |
+| `TEST_DURATION_SECONDS` | `300` | Default load test duration |
+
+### Performance Thresholds
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_ERROR_RATE` | `0.02` | Maximum acceptable error rate (2%) |
+| `MAX_P95_LATENCY_MS` | `2000` | P95 latency threshold for stability tests |
+| `MAX_P95_LATENCY_MS_SHORT` | `1500` | P95 latency threshold for throughput tests |
+
+### Dataset
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DICOM_ROOT_DIR` | `./dicom_samples` | Root directory for test DICOM files |
+
+### Runtime Overrides
+
+Any variable can be overridden at runtime:
 
 ```bash
-# Run all load tests
-python3 run_tests.py
+TEST_DURATION_SECONDS=10 LOAD_CONCURRENCY=4 python3 -m pytest tests/test_load_stability.py -vv
+```
 
-# Quick test (10 seconds)
-python3 run_tests.py --quick
+---
 
-# Specific test types
-python3 run_tests.py --stability
-python3 run_tests.py --throughput
+## Running Tests
 
-# Using pytest directly
+```bash
+# Run all tests
+python3 -m pytest -vv
+
+# Run load/performance tests only
 python3 -m pytest -m load -vv
-python3 -m pytest tests/test_load_stability.py -vv
+
+# Run integration tests only
+python3 -m pytest -m integration -vv
+
+# Exclude load tests (faster iteration)
+python3 -m pytest -m "not load" -vv
+
+# Run a specific test file
+python3 -m pytest tests/test_routing_transformations.py -vv
+
+# Run a single test function with full output
+python3 -m pytest tests/test_load_stability.py::test_load_stability_3x_peak -vv -s
 ```
 
-## How to Add a New Test
+An HTML report (`test_report.html`) is automatically generated after each test session.
 
-### Step 1: Choose Test Type and Location
+---
 
-Determine what type of test you're adding:
+## Test Suite
 
-- **Load/Performance**: `test_load_stability.py` or `test_routing_throughput.py`
-- **Routing/Transformation**: `test_routing_transformations.py` 
-- **AE Title Routing**: `test_calling_aet_routing.py`
-- **Data Validation**: `test_data_validation.py`
-- **Failure Scenarios**: `test_failure_modes.py`
-- **New Category**: Create new file `test_your_category.py`
+### Load and Performance Tests
 
-### Step 2: Basic Test Structure
+**`test_load_stability.py`** -- Drives sustained load at the configured multiplier (default 3x peak) for a configurable duration. Asserts error rate and P95 latency stay within thresholds. After the load run, samples unique StudyInstanceUIDs and verifies they arrived via C-FIND.
 
-```python
-# tests/test_your_feature.py
+**`test_routing_throughput.py`** -- Measures throughput at target images/sec and validates that the system sustains the expected rate without excessive latency.
 
-"""
-Brief description of what this test module validates.
-"""
+### Functional and Integration Tests
 
-from __future__ import annotations
+**`test_routing_transformations.py`** -- Verifies that Compass applies DICOM tag transformations correctly. Parametrized test cases send images with specific modality/series attributes and check that the routed study has the expected StudyDescription (e.g., OPV + GPA -> "Visual Fields (VF) GPA").
 
-import pytest
-from metrics import PerfMetrics
+**`test_calling_aet_routing.py`** -- Tests routing behavior across different Called AE titles (`LB-HTM-GI`, `LB-HTM-OPH`, `LB-HTM-ORTHO`). Validates that each route correctly accepts and processes images.
 
-# Mark for test categorization
-@pytest.mark.load  # or @pytest.mark.integration
-def test_your_feature_name(
-    dicom_sender,      # Network client
-    dicom_datasets,    # Loaded DICOM files
-    metrics: PerfMetrics,  # Performance tracking
-    perf_config,       # Configuration object
-):
-    """Test description - what this validates."""
-    
-    # 1. Setup test conditions
-    duration = 30  # seconds
-    
-    # 2. Execute test
-    total_sent = dicom_sender.load_test_for_duration(
-        datasets=dicom_datasets,
-        metrics=metrics,
-        duration_seconds=duration,
-    )
-    
-    # 3. Validate results
-    assert total_sent > 0, "Should send at least one file"
-    
-    # Check performance metrics
-    error_rate = metrics.error_rate
-    assert error_rate <= perf_config.thresholds.max_error_rate, \
-        f"Error rate {error_rate:.1%} exceeds threshold"
-    
-    p95_latency = metrics.p95_latency_ms
-    assert p95_latency <= perf_config.thresholds.max_p95_latency_ms_short, \
-        f"P95 latency {p95_latency:.1f}ms exceeds threshold"
-```
+**`test_data_validation.py`** -- Edge cases for Compass data handling: blank study dates, accession number formats, study date validation rules.
 
-### Step 3: Advanced Test Patterns
+**`test_failure_modes.py`** -- Validates Compass behavior under adverse conditions:
+- Long pauses (2 minutes) between sends
+- Duplicate image submission
+- Send interruptions and recovery
 
-#### Using Specific Test Data
+**`test_anonymize_and_send.py`** -- Strips PHI from DICOM files and sends anonymized data via C-STORE, then verifies arrival.
 
-```python
-def test_with_specific_modality(dicom_by_modality, dicom_sender, metrics):
-    """Test with specific DICOM modality."""
-    
-    # Get CT files specifically
-    from tests.conftest import get_files_by_modality
-    ct_files = get_files_by_modality(dicom_by_modality, "CT", count=5)
-    
-    # Load datasets
-    from data_loader import load_dataset
-    datasets = [load_dataset(f) for f in ct_files]
-    
-    # Run test with CT data only
-    result = dicom_sender.load_test_for_duration(
-        datasets=datasets,
-        metrics=metrics,
-        duration_seconds=30,
-    )
-    
-    assert result > 0
-```
+**`test_update_dicom_tags.py`** -- Unit and integration tests for the DICOM Tag Updater tool.
 
-#### Parametrized Tests
+### Test Fixtures
 
-```python
-@pytest.mark.parametrize("calling_aet", ["DEVICE_A", "DEVICE_B", "DEVICE_C"])
-def test_multiple_calling_aets(calling_aet, single_dicom_file, perf_config, metrics):
-    """Test routing with different calling AE titles."""
-    
-    # Create custom sender with specific AE title
-    custom_config = perf_config.endpoint
-    custom_config.local_ae_title = calling_aet
-    
-    sender = DicomSender(custom_config, perf_config.load_profile)
-    
-    # Load and send single file
-    from data_loader import load_dataset
-    dataset = load_dataset(single_dicom_file)
-    
-    sender._send_single_dataset(dataset, metrics)
-    
-    # Verify success
-    assert metrics.total_sent > 0
-    assert metrics.error_rate == 0
-```
+Tests use shared fixtures defined in `tests/conftest.py`:
 
-#### Custom Test Data Creation
+| Fixture | Scope | Description |
+|---------|-------|-------------|
+| `perf_config` | session | `TestConfig` loaded from environment |
+| `dicom_files` | session | Discovered DICOM file paths |
+| `dicom_datasets` | session | Loaded pydicom Dataset objects |
+| `dicom_sender` | session | `DicomSender` instance |
+| `cfind_client` | session | `CompassCFindClient` for C-FIND verification |
+| `metrics` | function | Fresh `PerfMetrics` per test |
+| `single_dicom_file` | session | Any single DICOM file |
+| `large_dicom_file` | session | A file >10MB (skips if unavailable) |
+| `small_dicom_files` | session | Up to 10 files <1MB |
+| `medium_dicom_files` | session | Files between 1-10MB |
+| `dicom_by_modality` | session | Files organized by modality (CT, MR, etc.) |
+| `dicom_by_size_category` | session | Files grouped as small/medium/large |
+| `test_dicom_with_attributes` | function | Factory for creating DICOM files with custom attributes |
 
-```python
-def test_with_custom_attributes(test_dicom_with_attributes, dicom_sender, metrics):
-    """Test with DICOM files having specific attributes."""
-    
-    # Create test file with custom attributes
-    test_file, dataset = test_dicom_with_attributes(
-        modality='OPV',
-        series_description='GPA',
-        patient_id='TEST123'
-    )
-    
-    # Send the custom file
-    dicom_sender._send_single_dataset(dataset, metrics)
-    
-    # Cleanup
-    import os
-    os.unlink(test_file)
-    
-    assert metrics.total_sent == 1
-```
+---
 
-### Step 4: Add Test Markers
+## DICOM Tag Updater
 
-Use pytest markers to categorize your tests:
+A standalone GUI and CLI tool for batch-updating DICOM tags in a folder.
 
-```python
-@pytest.mark.load          # Load/performance tests
-@pytest.mark.integration   # Integration tests
-@pytest.mark.slow         # Long-running tests
-@pytest.mark.parametrize   # Parametrized tests
-```
-
-### Step 5: Configuration for New Tests
-
-If your test needs new configuration parameters:
-
-1. Add to appropriate config class in `config.py`:
-
-```python
-@dataclass
-class YourTestConfig:
-    your_setting: str
-    your_threshold: float
-    
-    @classmethod
-    def from_env(cls) -> "YourTestConfig":
-        return cls(
-            your_setting=_env_str("YOUR_SETTING", "default_value"),
-            your_threshold=_env_float("YOUR_THRESHOLD", 1.0),
-        )
-```
-
-2. Add to master `TestConfig`:
-
-```python
-@dataclass
-class TestConfig:
-    # ... existing configs ...
-    your_config: YourTestConfig
-    
-    @classmethod
-    def from_env(cls) -> "TestConfig":
-        return cls(
-            # ... existing configs ...
-            your_config=YourTestConfig.from_env(),
-        )
-```
-
-3. Update your `.env` file:
-
-```env
-YOUR_SETTING=custom_value
-YOUR_THRESHOLD=2.5
-```
-
-## Test Types and Patterns
-
-### 1. Load Tests
-
-Test system performance under various loads:
-
-```python
-@pytest.mark.load
-def test_sustained_load(dicom_sender, dicom_datasets, metrics, perf_config):
-    """Verify system handles sustained load without degradation."""
-    
-    duration = perf_config.load_profile.test_duration_seconds
-    
-    total_sent = dicom_sender.load_test_for_duration(
-        datasets=dicom_datasets,
-        metrics=metrics,
-        duration_seconds=duration,
-        rate_limit_images_per_second=100,  # Custom rate
-    )
-    
-    # Validate performance stays within bounds
-    assert metrics.error_rate <= 0.01  # Max 1% errors
-    assert metrics.p95_latency_ms <= 2000  # Max 2s latency
-```
-
-### 2. Routing Tests
-
-Validate DICOM routing behavior:
-
-```python
-def test_routing_by_modality(test_dicom_with_attributes, dicom_sender, metrics):
-    """Test that different modalities route correctly."""
-    
-    modalities = ['CT', 'MR', 'CR', 'US']
-    
-    for modality in modalities:
-        # Create file with specific modality
-        file_path, dataset = test_dicom_with_attributes(modality=modality)
-        
-        # Send and track
-        dicom_sender._send_single_dataset(dataset, metrics)
-        
-        # Verify routing (would need C-FIND verification in real test)
-        
-        # Cleanup
-        import os
-        os.unlink(file_path)
-```
-
-### 3. Transformation Tests
-
-Verify DICOM tag modifications:
-
-```python
-def test_tag_transformation(test_dicom_with_attributes, perf_config):
-    """Test that Compass transforms tags correctly."""
-    
-    # Create file with specific attributes to trigger transformation
-    file_path, original_dataset = test_dicom_with_attributes(
-        modality='OPV',
-        series_description='GPA'  # Should trigger transformation
-    )
-    
-    # Send to Compass
-    sender = DicomSender(perf_config.endpoint, perf_config.load_profile)
-    metrics = PerfMetrics()
-    sender._send_single_dataset(original_dataset, metrics)
-    
-    # Verify transformation occurred (using C-FIND)
-    # This would query Compass to verify the tag was changed
-    
-    assert metrics.error_rate == 0
-```
-
-### 4. Failure Mode Tests
-
-Simulate various failure conditions:
-
-```python
-def test_slow_transmission(dicom_datasets, dicom_sender, metrics):
-    """Test behavior during slow transmission."""
-    
-    import time
-    
-    # Send files with delays between each
-    for dataset in dicom_datasets[:3]:  # Limit to 3 files
-        dicom_sender._send_single_dataset(dataset, metrics)
-        time.sleep(2)  # 2 second delay between sends
-    
-    # System should handle delays gracefully
-    assert metrics.error_rate <= 0.1  # Allow some tolerance for timeouts
-```
-
-## Configuration Management
-
-### Environment Variables
-
-All configuration is managed through environment variables:
-
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `COMPASS_HOST` | Compass server hostname | `127.0.0.1` |
-| `COMPASS_PORT` | DICOM port | `11112` |
-| `DICOM_ROOT_DIR` | Test data directory | `./dicom_samples` |
-| `PEAK_IMAGES_PER_SECOND` | Baseline performance rate | `50` |
-| `TEST_DURATION_SECONDS` | Default test duration | `300` |
-| `MAX_ERROR_RATE` | Acceptable error rate | `0.02` |
-
-### Runtime Configuration Override
-
-You can override settings for specific test runs:
+### GUI Mode
 
 ```bash
-# Quick test with custom settings
-export TEST_DURATION_SECONDS=10
-export LOAD_CONCURRENCY=4
-python3 -m pytest tests/test_load_stability.py -vv
-
-# High-intensity test
-export LOAD_MULTIPLIER=5.0
-export PEAK_IMAGES_PER_SECOND=100
-python3 run_tests.py
+python3 update_dicom_tags.py
 ```
 
-### Configuration in Tests
+Features:
+- Browse for a folder of DICOM files
+- Auto-generates unique StudyInstanceUID, AccessionNumber, and SeriesInstanceUID per run
+- Default tags: PatientID, PatientName, StudyDate, StudyDescription, Modality
+- Add custom tags dynamically (by keyword or hex group/element)
+- Preview changes before applying
+- Verbose and dry-run options
 
-Access configuration in your tests:
-
-```python
-def test_with_config_access(perf_config):
-    """Test that uses configuration values."""
-    
-    # Access endpoint configuration
-    host = perf_config.endpoint.host
-    port = perf_config.endpoint.port
-    
-    # Access load testing parameters
-    peak_rate = perf_config.load_profile.peak_images_per_second
-    multiplier = perf_config.load_profile.load_multiplier
-    target_rate = peak_rate * multiplier
-    
-    # Access thresholds
-    max_error_rate = perf_config.thresholds.max_error_rate
-    
-    # Use in test logic
-    assert target_rate > 0
-```
-
-## Data Management
-
-### Test Data Sources
-
-1. **Generated Samples**: `create_diverse_dicom_samples.py` creates test files
-2. **Custom Data**: Place DICOM files in directory specified by `DICOM_ROOT_DIR`
-3. **Runtime Generation**: Use `test_dicom_with_attributes` fixture
-
-### Data Selection Fixtures
-
-Use built-in fixtures for intelligent data selection:
-
-```python
-def test_with_large_files(large_dicom_file):
-    """Test with files >10MB."""
-    # large_dicom_file automatically selects a large file
-    # or skips test if none available
-
-def test_with_small_batch(small_dicom_files):
-    """Test with small files <1MB.""" 
-    # Returns up to 10 small files or skips if <3 available
-
-def test_by_modality(dicom_by_modality):
-    """Test organized by DICOM modality."""
-    ct_files = dicom_by_modality.get('CT', [])
-    if ct_files:
-        # Use CT files specifically
-        pass
-
-def test_size_categories(dicom_by_size_category):
-    """Test with files grouped by size."""
-    small_files = dicom_by_size_category['small']
-    medium_files = dicom_by_size_category['medium']
-    large_files = dicom_by_size_category['large']
-```
-
-### Creating Custom Test Data
-
-```python
-def test_with_custom_data(test_dicom_with_attributes):
-    """Create DICOM files with specific attributes."""
-    
-    # Create file with custom attributes
-    file_path, dataset = test_dicom_with_attributes(
-        patient_id='TEST001',
-        modality='CT',
-        study_description='Test Study',
-        series_description='Test Series',
-        institution_name='Test Hospital'
-    )
-    
-    # Use the file in your test
-    # ...
-    
-    # Cleanup happens automatically
-```
-
-## Best Practices
-
-### 1. Test Design
-
-- **Single Responsibility**: Each test should verify one specific behavior
-- **Descriptive Names**: Use clear, descriptive test function names
-- **Proper Markers**: Add appropriate pytest markers for categorization
-- **Error Handling**: Include proper assertions with clear failure messages
-
-### 2. Performance Testing
-
-```python
-def test_performance_example(dicom_sender, dicom_datasets, metrics, perf_config):
-    """Example of proper performance test structure."""
-    
-    # 1. Pre-test validation
-    assert len(dicom_datasets) > 0, "Need test data to run performance test"
-    
-    # 2. Pre-test connectivity check
-    assert dicom_sender.ping(), "Compass must be reachable for performance test"
-    
-    # 3. Run test
-    duration = perf_config.load_profile.test_duration_seconds
-    total_sent = dicom_sender.load_test_for_duration(
-        datasets=dicom_datasets,
-        metrics=metrics,
-        duration_seconds=duration,
-    )
-    
-    # 4. Comprehensive validation
-    assert total_sent > 0, "Should successfully send at least one file"
-    
-    error_rate = metrics.error_rate
-    assert error_rate <= perf_config.thresholds.max_error_rate, \
-        f"Error rate {error_rate:.1%} exceeds {perf_config.thresholds.max_error_rate:.1%}"
-    
-    p95_latency = metrics.p95_latency_ms
-    max_latency = perf_config.thresholds.max_p95_latency_ms
-    assert p95_latency <= max_latency, \
-        f"P95 latency {p95_latency:.1f}ms exceeds {max_latency}ms threshold"
-    
-    # 5. Log results for debugging
-    print(f"Performance Test Results:")
-    print(f"  Files sent: {total_sent}")
-    print(f"  Duration: {duration}s") 
-    print(f"  Rate: {total_sent/duration:.1f} files/sec")
-    print(f"  Error rate: {error_rate:.1%}")
-    print(f"  P95 latency: {p95_latency:.1f}ms")
-```
-
-### 3. Resource Management
-
-```python
-def test_with_cleanup():
-    """Example of proper resource cleanup."""
-    
-    temp_files = []
-    try:
-        # Create temporary resources
-        for i in range(3):
-            file_path, dataset = test_dicom_with_attributes(patient_id=f'TEST{i:03d}')
-            temp_files.append(file_path)
-            
-        # Use resources in test
-        # ...
-        
-    finally:
-        # Cleanup
-        import os
-        for temp_file in temp_files:
-            if os.path.exists(temp_file):
-                os.unlink(temp_file)
-```
-
-### 4. Configuration Best Practices
-
-- Use environment variables for all configurable values
-- Provide sensible defaults in config classes
-- Document all configuration options
-- Validate configuration values where possible
-
-### 5. Error Handling
-
-```python
-def test_with_proper_error_handling(dicom_sender, single_dicom_file):
-    """Example of proper error handling in tests."""
-    
-    try:
-        # Test operation
-        from data_loader import load_dataset
-        dataset = load_dataset(single_dicom_file)
-        
-        metrics = PerfMetrics()
-        dicom_sender._send_single_dataset(dataset, metrics)
-        
-        # Validate success
-        assert metrics.total_sent == 1
-        
-    except Exception as e:
-        # Provide helpful context for debugging
-        pytest.fail(f"Test failed with error: {e}. "
-                   f"Check Compass connectivity and configuration.")
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. Connection Errors
-
-**Problem**: Tests fail with connection refused or timeout errors.
-
-**Solution**:
-```bash
-# Check Compass connectivity
-telnet your-compass-server.com 11112
-
-# Verify configuration
-echo $COMPASS_HOST
-echo $COMPASS_PORT
-
-# Test C-ECHO connectivity
-python3 -c "
-from config import TestConfig
-from dicom_sender import DicomSender
-config = TestConfig.from_env()
-sender = DicomSender(config.endpoint, config.load_profile)
-print('Ping result:', sender.ping())
-"
-```
-
-#### 2. No Test Data
-
-**Problem**: Tests skip due to missing DICOM files.
-
-**Solution**:
-```bash
-# Generate test data
-python3 create_diverse_dicom_samples.py
-
-# Check data location
-ls -la $DICOM_ROOT_DIR
-
-# Verify DICOM files are valid
-python3 -c "
-from data_loader import find_dicom_files
-from pathlib import Path
-files = find_dicom_files(Path('./dicom_samples'))
-print(f'Found {len(files)} DICOM files')
-"
-```
-
-#### 3. Performance Test Failures
-
-**Problem**: Tests fail performance thresholds.
-
-**Solution**:
-```bash
-# Reduce test intensity temporarily
-export TEST_DURATION_SECONDS=10
-export LOAD_CONCURRENCY=2
-export LOAD_MULTIPLIER=1.0
-
-# Or adjust thresholds for your environment
-export MAX_ERROR_RATE=0.05
-export MAX_P95_LATENCY_MS=5000
-```
-
-#### 4. Import Errors
-
-**Problem**: `ImportError: No module named 'config'`
-
-**Solution**:
-```bash
-# Run tests from project root
-cd /path/to/dicomAuto
-python3 -m pytest tests/
-
-# Or use the test runner
-python3 run_tests.py
-```
-
-### Debugging Test Failures
-
-#### Enable Verbose Output
+### CLI Mode
 
 ```bash
-# Run with maximum verbosity
-python3 -m pytest tests/test_your_test.py -vv -s
-
-# Add pytest debugging
-python3 -m pytest tests/test_your_test.py -vv -s --tb=long
-
-# Run single test with full output
-python3 -m pytest tests/test_your_test.py::test_function_name -vv -s
+python3 update_dicom_tags.py /path/to/dicom/folder --verbose --dry-run
 ```
 
-#### Add Debug Logging
+| Flag | Description |
+|------|-------------|
+| `--verbose` | Print detailed output for each file processed |
+| `--dry-run` | Show what would be changed without modifying files |
+
+---
+
+## C-FIND Query Client
+
+The `compass_cfind_client.py` module provides a DICOM C-FIND client for querying studies on the Compass server (or a separate Image Manager/Query server).
+
+### Standalone Usage
+
+```bash
+# Test connection
+python3 compass_cfind_client.py
+
+# Find a study by UID
+python3 compass_cfind_client.py study <study_instance_uid>
+
+# Find studies by patient ID
+python3 compass_cfind_client.py patient <patient_id>
+
+# Find today's studies
+python3 compass_cfind_client.py today
+```
+
+### Programmatic Usage
 
 ```python
-def test_with_debugging(dicom_sender, metrics):
-    """Test with debug output."""
-    
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    
-    # Your test code here
-    # Debug output will show detailed information
+from compass_cfind_client import CompassCFindClient, CompassCFindConfig
+
+config = CompassCFindConfig.from_env()
+client = CompassCFindClient(config)
+
+# Test connectivity
+client.test_connection()
+
+# Query by study UID
+result = client.find_study_by_uid("1.2.3.4.5.6.7.8.9")
+
+# Query by patient
+studies = client.find_studies_by_patient_id("PATIENT001")
+
+# Query by date range
+studies = client.find_studies_by_date_range("20240101", "20240131")
+
+# Query by modality
+studies = client.find_studies_by_modality("CT")
 ```
 
-### Getting Help
+---
 
-1. **Check logs**: Look at pytest output and any error messages
-2. **Verify configuration**: Ensure `.env` file settings are correct
-3. **Test connectivity**: Use ping() method to verify Compass reachability  
-4. **Check data**: Ensure test data exists and is valid
-5. **Review documentation**: Check README.md and existing test examples
+## HTML Test Reports
 
-This guide provides the foundation for working with the DICOM testing framework. As you become more familiar with the codebase, you can explore advanced patterns and contribute improvements to the framework itself.
+Every pytest session automatically generates `test_report.html` in the project root. The report includes:
+
+- Summary dashboard with pass/fail/skip counts
+- Donut chart of test outcomes and duration bar chart
+- Configuration summary (endpoint, load profile, thresholds)
+- Filterable results table with per-test performance metrics
+- Performance detail panels for load tests: latency histogram, throughput timeline, latency-over-time scatter plot
+- Collapsible failure details with full tracebacks
+
+The report is self-contained HTML with embedded Chart.js and a dark theme.
+
+---
+
+## Building the Executable
+
+The DICOM Tag Updater can be packaged as a standalone executable using PyInstaller.
+
+```bash
+pip install pyinstaller
+pyinstaller build_exe.spec
+```
+
+The output executable is `dist/DICOMTagUpdater`. It bundles pydicom and dcmutl, excludes heavy dependencies (pandas, torch, matplotlib), and runs as a GUI application (no console window).
+
+For Windows builds, see `build_windows.bat`.
+
+---
+
+## Architecture
+
+### Data Flow
+
+```
+DICOM Files (dicom_samples/)
+        |
+        v
+  data_loader.py          -- discover files (DICM magic), load + decompress
+        |
+        v
+  dicom_sender.py         -- C-STORE via pynetdicom, ThreadPoolExecutor concurrency
+        |
+        v
+  Laurel Bridge Compass   -- routes images based on AE title and transformation rules
+        |
+        v
+  compass_cfind_client.py -- C-FIND verification: poll until study appears
+        |
+        v
+  metrics.py              -- thread-safe latency/error collection
+        |
+        v
+  report.py               -- generate HTML report with charts
+```
+
+### Core Modules
+
+- **`config.py`** -- Single entry point `TestConfig.from_env()` composes all configuration from environment variables into typed dataclasses: `DicomEndpointConfig`, `LoadProfileConfig`, `DatasetConfig`, `PerformanceThresholdsConfig`, `IntegrationTestConfig`.
+
+- **`data_loader.py`** -- `find_dicom_files()` recursively discovers files by DICM magic string validation. `load_dataset()` loads files and automatically decompresses JPEG, JPEG2000, and RLE transfer syntaxes via pylibjpeg.
+
+- **`dicom_sender.py`** -- `DicomSender` wraps pynetdicom for C-STORE operations. `ping()` sends C-ECHO to verify connectivity. `load_test_for_duration()` drives sustained load using a thread pool with configurable concurrency and optional rate limiting.
+
+- **`metrics.py`** -- `PerfMetrics` collects `Sample` objects (start/end time, latency, success/failure, error message) in a thread-safe manner. Exposes `error_rate`, `p95_latency_ms`, and `snapshot()` for reporting.
+
+- **`dcmutl.py`** -- Low-level DICOM utilities: `get_dcm_files()` for recursive file discovery by extension, `update_tags_ds()` for tag manipulation by keyword or hex notation.
+
+- **`compass_cfind_client.py`** -- `CompassCFindClient` supports Study Root and Patient Root query models, with automatic fallback strategies. Used by tests to verify that sent studies arrived at the destination.
+
+- **`report.py`** -- Generates self-contained HTML reports with Chart.js visualizations, integrated via pytest session hooks in `conftest.py`.
+
+### Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| pynetdicom | DICOM networking (C-STORE, C-ECHO, C-FIND) |
+| pydicom | DICOM file parsing and tag manipulation |
+| pylibjpeg, pylibjpeg-libjpeg, pylibjpeg-openjpeg | Automatic DICOM decompression |
+| pillow | Image processing support |
+| pytest | Test framework with markers and fixtures |
+| python-dotenv | Environment variable loading from `.env` |
