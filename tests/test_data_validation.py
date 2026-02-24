@@ -400,8 +400,18 @@ def test_blank_patient_name_handling(
     
     dicom_sender._send_single_dataset(ds, metrics)
     
-    assert metrics.successes == 1, "Send failed"
-    print(f"  Status: SUCCESS")
+    sample = metrics.samples[0]
+    if sample.success:
+        print(f"  Status: ACCEPTED by Compass")
+    else:
+        status_hex = f"0x{sample.status_code:04X}" if sample.status_code is not None else "N/A"
+        print(f"  Status: REJECTED by Compass")
+        print(f"  Status code: {status_hex}")
+        print(f"  Error: {sample.error}")
+        pytest.fail(
+            f"Compass rejected blank PatientName (status {status_hex}). "
+            f"Expected Compass to accept and route to destination."
+        )
 
 
 @pytest.mark.integration
