@@ -6,6 +6,8 @@ Tests that validate Compass data handling including blank fields, accession numb
 
 from __future__ import annotations
 
+import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -389,6 +391,22 @@ def test_blank_patient_name_handling(
     ds.AccessionNumber = generate_uid().split('.')[-1][:16]
     ds.InstitutionName = 'TEST FACILITY'
     ds.ReferringPhysicianName = 'TEST^PROVIDER'
+    
+    # Save to disk and reload to normalize encoding (same pattern as
+    # test_anonymize_and_send, which avoids Read PDU errors).
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".dcm")
+    os.close(tmp_fd)
+    try:
+        transfer_syntax = str(ds.file_meta.TransferSyntaxUID) if hasattr(ds, 'file_meta') and hasattr(ds.file_meta, 'TransferSyntaxUID') else '1.2.840.10008.1.2.1'
+        if transfer_syntax == '1.2.840.10008.1.2':
+            ds.save_as(tmp_path, implicit_vr=True, little_endian=True)
+        elif transfer_syntax == '1.2.840.10008.1.2.2':
+            ds.save_as(tmp_path, implicit_vr=False, little_endian=False)
+        else:
+            ds.save_as(tmp_path, implicit_vr=False, little_endian=True)
+        ds = dcmread(tmp_path)
+    finally:
+        os.unlink(tmp_path)
     
     print(f"\n{'='*70}")
     print(f"BLANK PATIENT NAME TEST")
