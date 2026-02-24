@@ -1,32 +1,14 @@
 # DICOM Automation Suite
 
-DICOM performance and load testing framework for Laurel Bridge Compass, with a standalone GUI/CLI tool for updating DICOM tags. Built on pytest, pynetdicom, and pydicom.
+DICOM performance and load testing framework for Laurel Bridge Compass built on pytest, pynetdicom, and pydicom.
 
 ---
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Project Structure](#project-structure)
-- [Setup](#setup)
-- [Configuration](#configuration)
-- [Running Tests](#running-tests)
-- [Test Suite](#test-suite)
-- [DICOM Tag Updater](#dicom-tag-updater)
-- [C-FIND Query Client](#c-find-query-client)
-- [HTML Test Reports](#html-test-reports)
-- [Building the Executable](#building-the-executable)
-- [Architecture](#architecture)
-
----
 
 ## Overview
 
-This project provides two main capabilities:
+A pytest-based test suite sends DICOM images to a Laurel Bridge Compass router via C-STORE, measures performance (throughput, latency, error rate), and verifies delivery via C-FIND. Tests cover load/stress scenarios, routing transformations, failure modes, data validation, and AE title routing.
 
-1. **Automated DICOM testing** -- A pytest-based test suite that sends DICOM images to a Laurel Bridge Compass router via C-STORE, measures performance (throughput, latency, error rate), and verifies delivery via C-FIND. Tests cover load/stress scenarios, routing transformations, failure modes, data validation, and AE title routing.
-
-2. **DICOM Tag Updater** -- A Tkinter GUI application (also usable from CLI) for batch-updating DICOM tags across files in a folder. Generates unique StudyInstanceUID, AccessionNumber, and SeriesInstanceUID per run.
 
 ---
 
@@ -40,13 +22,12 @@ dicomAuto/
 |-- metrics.py                   # Thread-safe performance metrics collection
 |-- dcmutl.py                    # Low-level DICOM tag manipulation utilities
 |-- compass_cfind_client.py      # C-FIND query client for verifying delivery
-|-- report.py                    # HTML test report generator (Chart.js, dark theme)
-|-- update_dicom_tags.py         # GUI + CLI DICOM tag updater
-|-- build_exe.spec               # PyInstaller spec for building standalone executable
+|-- report.py                    # HTML test report generator
+|-- update_dicom_tags.py         # DICOM tag updater
 |
 |-- tests/
 |   |-- conftest.py              # Shared fixtures, report hooks, data selection helpers
-|   |-- test_load_stability.py   # Load/stress tests at 3x peak
+|   |-- test_load_stability.py   # Load/stress tests
 |   |-- test_routing_throughput.py# Throughput tests at target images/sec
 |   |-- test_routing_transformations.py  # Tag transformation verification
 |   |-- test_data_validation.py  # Compass data handling edge cases
@@ -56,8 +37,6 @@ dicomAuto/
 |   |-- test_update_dicom_tags.py       # Tag updater tool tests
 |   |-- test_data_selection_examples.py # Fixture usage examples
 |
-|-- dicom_samples/               # Test DICOM files (not committed)
-|-- .env                         # Environment configuration (not committed)
 |-- env_template.txt             # Template for .env
 |-- requirements.txt             # Python dependencies
 |-- pytest.ini                   # Pytest configuration and markers
@@ -70,7 +49,7 @@ dicomAuto/
 ### Prerequisites
 
 - Python 3.9+
-- Network access to a Laurel Bridge Compass server (for integration/load tests)
+- Network access to a Laurel Bridge Compass server (for integration/load tests). IP address as well as DNS name both work
 
 ### Installation
 
@@ -91,13 +70,6 @@ cp env_template.txt .env
 
 Place DICOM files in the `dicom_samples/` directory (or set `DICOM_ROOT_DIR` in `.env`). Files are discovered recursively by validating the DICM magic string, so any valid DICOM file will be found regardless of extension.
 
-You can also generate sample files:
-
-```bash
-python3 create_diverse_dicom_samples.py
-```
-
----
 
 ## Configuration
 
@@ -113,7 +85,7 @@ All settings are managed through environment variables, typically set in a `.env
 
 ### Route-Specific AE Titles
 
-Each route has its own Called AE (remote) and Calling AE (local):
+Each route has its own Called AE (the one we are calling) and Calling AE (the one that makes the call):
 
 | Route | Remote AE Variable | Local AE Variable |
 |-------|--------------------|--------------------|
@@ -127,7 +99,7 @@ When `COMPASS_ROUTE` is unset, `COMPASS_AE_TITLE` and `LOCAL_AE_TITLE` are used 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CFIND_HOST` | _(uses COMPASS_HOST)_ | C-FIND server (if different from Compass) |
+| `CFIND_HOST` | _(uses COMPASS_HOST)_ | C-FIND server |
 | `CFIND_PORT` | _(uses COMPASS_PORT)_ | C-FIND port |
 | `CFIND_AE_TITLE` | _(uses COMPASS_AE_TITLE)_ | Called AE for queries |
 | `CFIND_VERIFY` | `true` | Enable/disable C-FIND verification after sends |
@@ -160,7 +132,7 @@ When `COMPASS_ROUTE` is unset, `COMPASS_AE_TITLE` and `LOCAL_AE_TITLE` are used 
 
 ### Runtime Overrides
 
-Any variable can be overridden at runtime:
+Any variable can be overridden at runtime like this:
 
 ```bash
 TEST_DURATION_SECONDS=10 LOAD_CONCURRENCY=4 python3 -m pytest tests/test_load_stability.py -vv
@@ -243,23 +215,8 @@ Tests use shared fixtures defined in `tests/conftest.py`:
 
 ## DICOM Tag Updater
 
-A standalone GUI and CLI tool for batch-updating DICOM tags in a folder.
+A standalone CLI tool for batch-updating DICOM tags in a folder.
 
-### GUI Mode
-
-```bash
-python3 update_dicom_tags.py
-```
-
-Features:
-- Browse for a folder of DICOM files
-- Auto-generates unique StudyInstanceUID, AccessionNumber, and SeriesInstanceUID per run
-- Default tags: PatientID, PatientName, StudyDate, StudyDescription, Modality
-- Add custom tags dynamically (by keyword or hex group/element)
-- Preview changes before applying
-- Verbose and dry-run options
-
-### CLI Mode
 
 ```bash
 python3 update_dicom_tags.py /path/to/dicom/folder --verbose --dry-run
@@ -328,23 +285,6 @@ Every pytest session automatically generates `test_report.html` in the project r
 - Filterable results table with per-test performance metrics
 - Performance detail panels for load tests: latency histogram, throughput timeline, latency-over-time scatter plot
 - Collapsible failure details with full tracebacks
-
-The report is self-contained HTML with embedded Chart.js and a dark theme.
-
----
-
-## Building the Executable
-
-The DICOM Tag Updater can be packaged as a standalone executable using PyInstaller.
-
-```bash
-pip install pyinstaller
-pyinstaller build_exe.spec
-```
-
-The output executable is `dist/DICOMTagUpdater`. It bundles pydicom and dcmutl, excludes heavy dependencies (pandas, torch, matplotlib), and runs as a GUI application (no console window).
-
-For Windows builds, see `build_windows.bat`.
 
 ---
 
