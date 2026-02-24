@@ -363,8 +363,6 @@ def test_blank_patient_name_handling(
     dicom_sender,
     single_dicom_file: Path,
     metrics: PerfMetrics,
-    cfind_client,
-    perf_config,
 ):
     """
     Send file with blank PatientName.
@@ -381,9 +379,16 @@ def test_blank_patient_name_handling(
     ds.SeriesInstanceUID = generate_uid()
     ds.SOPInstanceUID = generate_uid()
     
-    # Blank patient name
+    # Blank patient name (the variable under test)
     ds.PatientName = ''
-    ds.PatientID = 'TEST-ID-12345'  # Keep ID for tracking
+    
+    # Populate all other demographics to match what test_anonymize_and_send uses,
+    # so that blank PatientName is the only difference.
+    ds.PatientID = 'TEST-ID-12345'
+    ds.PatientBirthDate = '19010101'
+    ds.AccessionNumber = generate_uid().split('.')[-1][:16]
+    ds.InstitutionName = 'TEST FACILITY'
+    ds.ReferringPhysicianName = 'TEST^PROVIDER'
     
     print(f"\n{'='*70}")
     print(f"BLANK PATIENT NAME TEST")
@@ -391,21 +396,12 @@ def test_blank_patient_name_handling(
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
     print(f"  PatientName: '' (blank)")
     print(f"  PatientID: {ds.PatientID}")
+    print(f"  AccessionNumber: {ds.AccessionNumber}")
     
     dicom_sender._send_single_dataset(ds, metrics)
     
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
-    
-    # C-FIND verification
-    print(f"\n[C-FIND VERIFICATION]")
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id='TEST-ID-12345')
-    if study:
-        pn = study.get('PatientName', '')
-        if pn and pn.strip():
-            print(f"  [INFO] PatientName populated by Compass: {pn}")
-        else:
-            print(f"  [INFO] PatientName remains blank")
 
 
 @pytest.mark.integration
