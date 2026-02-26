@@ -213,21 +213,19 @@ def verify_study_arrived(
 @pytest.fixture(scope="session")
 def large_dicom_file(dicom_files: List[Path]):
     """
-    Select the largest DICOM file available for testing.
-    Gracefully skips if no file exceeds 10 MB.
+    Select a large DICOM file (>10MB) for testing.
+    Gracefully skips if no large file is available.
     """
     large_threshold_bytes = 10 * 1024 * 1024  # 10MB
-
-    largest = max(dicom_files, key=lambda f: f.stat().st_size)
-    largest_size = largest.stat().st_size
-
-    if largest_size <= large_threshold_bytes:
-        pytest.skip(f"No large DICOM file (>10MB) found in dataset. "
-                    f"Available files: {len(dicom_files)}")
-
-    size_mb = largest_size / (1024 * 1024)
-    print(f"\n[INFO] Selected large file: {largest.name} ({size_mb:.2f}MB)")
-    return largest
+    
+    for file in dicom_files:
+        if file.stat().st_size > large_threshold_bytes:
+            file_size_mb = file.stat().st_size / (1024 * 1024)
+            print(f"\n[INFO] Selected large file: {file.name} ({file_size_mb:.2f}MB)")
+            return file
+    
+    pytest.skip(f"No large DICOM file (>10MB) found in dataset. "
+                f"Available files: {len(dicom_files)}")
 
 
 @pytest.fixture(scope="session")
