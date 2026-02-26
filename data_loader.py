@@ -20,17 +20,11 @@ def is_dicom_file(path: Path) -> bool:
     """Check if file is a valid DICOM file by verifying magic string."""
     try:
         with open(path, 'rb') as f:
-            f.seek(128)
-            magic = f.read(4)
-            if magic != b'DICM':
-                logger.debug(
-                    "Not DICOM: %s (bytes 128-131: %r, file size: %d)",
-                    path.name, magic, path.stat().st_size,
-                )
-                return False
-            return True
-    except (IOError, OSError) as exc:
-        logger.warning("Cannot read %s: %s", path.name, exc)
+            f.seek(128)  # Skip to byte 128 (end of preamble)
+            magic = f.read(4)  # Read 4 bytes for 'DICM'
+            return magic == b'DICM'
+    except (IOError, OSError):
+        # File can't be read or is too small
         return False
 
 
@@ -41,7 +35,6 @@ def find_dicom_files(root: Path, recursive: bool = True) -> List[Path]:
 
     pattern = "**/*" if recursive else "*"
     files: List[Path] = []
-    skipped: List[str] = []
     for path in root.glob(pattern):
         if not path.is_file():
             continue
@@ -49,15 +42,11 @@ def find_dicom_files(root: Path, recursive: bool = True) -> List[Path]:
         if path.name.startswith("."):
             continue
 
+        # Validate that the file is actually a DICOM file
         if not is_dicom_file(path):
-            size_mb = path.stat().st_size / (1024 * 1024)
-            skipped.append(f"{path.name} ({size_mb:.1f} MB)")
             continue
 
         files.append(path)
-
-    if skipped:
-        logger.info("Skipped %d non-DICOM file(s): %s", len(skipped), ", ".join(skipped))
 
     if not files:
         raise RuntimeError(f"No DICOM files found under: {root}")
