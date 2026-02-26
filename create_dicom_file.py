@@ -24,6 +24,7 @@ Examples:
 """
 
 import argparse
+import struct
 import sys
 import time
 from pathlib import Path
@@ -137,28 +138,38 @@ def create_dicom_file(
     ds.is_implicit_VR = False
     ds.is_little_endian = True
 
+    max_explicit_length = 0xFFFFFFFE
+    if expected_pixel_bytes > max_explicit_length:
+        print(f"ERROR: Pixel data ({_format_size(expected_pixel_bytes)}) exceeds "
+              f"DICOM explicit length limit (~4 GB)")
+        sys.exit(1)
+
+    print(f"  Writing metadata header...")
+    ds.save_as(str(output_path))
+
+    print(f"  Streaming pixel data to file...")
     rng = np.random.default_rng(seed=42)
     batch_size = 50
-    frame_arrays = []
 
-    for start in range(0, num_frames, batch_size):
-        end = min(start + batch_size, num_frames)
-        count = end - start
-        batch = rng.integers(-1024, 3072, size=(count, rows, cols), dtype=np.int16)
-        frame_arrays.append(batch.tobytes())
+    with open(output_path, 'ab') as f:
+        # Pixel Data tag (7FE0,0010), VR "OW", 2 reserved bytes, uint32 length
+        f.write(struct.pack('<HH', 0x7FE0, 0x0010))
+        f.write(b'OW\x00\x00')
+        f.write(struct.pack('<I', expected_pixel_bytes))
 
-        done = end
-        pct = done / num_frames * 100
-        size_so_far = done * frame_size
-        print(f"  Generating pixel data: {done}/{num_frames} frames ({pct:.0f}%) - {_format_size(size_so_far)}", end="\r")
+        for start in range(0, num_frames, batch_size):
+            end = min(start + batch_size, num_frames)
+            count = end - start
+            batch = rng.integers(-1024, 3072, size=(count, rows, cols), dtype=np.int16)
+            f.write(batch.tobytes())
+            del batch
 
-    print()
+            pct = end / num_frames * 100
+            size_so_far = end * frame_size
+            print(f"  Streaming: {end}/{num_frames} frames "
+                  f"({pct:.0f}%) - {_format_size(size_so_far)}", end="\r")
 
-    ds.PixelData = b"".join(frame_arrays)
-    del frame_arrays
-
-    print(f"  Saving...")
-    ds.save_as(str(output_path))
+        print()
 
     actual_size = output_path.stat().st_size
     print(f"  Done: {output_path.name} ({_format_size(actual_size)})")
