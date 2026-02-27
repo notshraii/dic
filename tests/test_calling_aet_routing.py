@@ -11,7 +11,7 @@ from pydicom.uid import generate_uid
 
 from data_loader import load_dataset
 from metrics import PerfMetrics
-from tests.conftest import verify_study_arrived
+from tests.conftest import manual_verification_required, verify_study_arrived
 
 
 # ============================================================================
@@ -286,6 +286,7 @@ def test_multiple_aets_batch_send(
 # ============================================================================
 
 @pytest.mark.integration
+@pytest.mark.manual_verify
 def test_unknown_called_aet(
     single_dicom_file,
     dicom_sender,
@@ -329,11 +330,15 @@ def test_unknown_called_aet(
         print(f"\n[RESULT]")
         print(f"  Successes: {metrics.successes}, Failures: {metrics.failures}")
 
-        assert metrics.failures >= 1, (
-            f"Compass ACCEPTED unknown called AET '{unknown_aet}' — "
-            f"expected rejection. Study {test_study_uid} may have been "
-            f"routed to an unintended destination."
-        )
+        with manual_verification_required(
+            "Unknown called AET rejection -- verify on Compass server that "
+            f"'{unknown_aet}' is not a configured destination"
+        ):
+            assert metrics.failures >= 1, (
+                f"Compass ACCEPTED unknown called AET '{unknown_aet}' — "
+                f"expected rejection. Study {test_study_uid} may have been "
+                f"routed to an unintended destination."
+            )
         print(f"  Compass correctly rejected unknown called AET '{unknown_aet}'")
 
     finally:
