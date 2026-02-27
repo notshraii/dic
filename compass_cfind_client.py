@@ -154,16 +154,21 @@ class CompassCFindClient:
         Find a study by Study Instance UID.
 
         Strategy (in order):
-        1. Study Root STUDY level — most servers support this.
-        2. Patient Root STUDY level — some servers require this model.
+        1. Patient Root STUDY level — some servers require this model.
+        2. Study Root STUDY level — most servers support this.
         3. Patient Root PATIENT level (requires patient_id) — fallback for servers
            that only support Patient Root at the patient level (e.g. TEAMINT_SCP).
            Returns a patient-level dataset confirming the patient exists on the server.
+
+        After a successful find, ``self.last_find_strategy`` is set to a short
+        description of the strategy that matched (useful for diagnostics).
         """
         original_model = self.config.query_model
+        self.last_find_strategy: Optional[str] = None
 
         # Strategy 1 & 2: STUDY-level queries with both models
         for model in ("PATIENT", "STUDY"):
+            strategy_label = f"{model} Root, STUDY level"
             self.config.query_model = model
             ds = Dataset()
             ds.QueryRetrieveLevel = "STUDY"
@@ -178,13 +183,18 @@ class CompassCFindClient:
             try:
                 results = self._execute_find(ds)
                 if results:
+                    self.last_find_strategy = strategy_label
+                    logger.info(f"Study found via strategy: {strategy_label}")
                     self.config.query_model = original_model
                     return results[0]
             except Exception as e:
                 logger.warning(f"C-FIND with model={model} level=STUDY failed: {e}")
 
-        # Strategy 3: Patient Root PATIENT-level fallback
+        # Strategy 3: Patient Root PATIENT-level fallback.
+        # WARNING: PATIENT-level results do NOT contain study-level attributes
+        # (StudyDate, AccessionNumber, StudyInstanceUID, etc.).
         if patient_id:
+            strategy_label = "PATIENT Root, PATIENT level (fallback - no study attributes)"
             self.config.query_model = "PATIENT"
             ds = Dataset()
             ds.QueryRetrieveLevel = "PATIENT"
@@ -194,9 +204,11 @@ class CompassCFindClient:
             try:
                 results = self._execute_find(ds)
                 if results:
-                    logger.info(
+                    self.last_find_strategy = strategy_label
+                    logger.warning(
                         f"Patient found via PATIENT-level query (PatientID={patient_id}). "
-                        f"Server does not support STUDY-level queries."
+                        f"Study-level attributes (StudyDate, AccessionNumber, etc.) are NOT "
+                        f"available in this result. STUDY-level queries failed for this server."
                     )
                     self.config.query_model = original_model
                     return results[0]

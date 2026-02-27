@@ -184,8 +184,10 @@ def verify_study_arrived(
             ) from e
         if result is not None:
             study_dict = cfind_client.dataset_to_dict(result)
+            strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
             elapsed = time.time() - start
             print(f"  [CFIND VERIFY] Study found after {elapsed:.1f}s ({attempts} attempt(s))")
+            print(f"  [CFIND VERIFY] Strategy used: {strategy}")
             for key, val in study_dict.items():
                 print(f"    {key}: {val}")
             return study_dict
