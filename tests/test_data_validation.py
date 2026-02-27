@@ -92,22 +92,28 @@ def test_populate_blank_study_date(
     print(f"\n{'='*70}")
     print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
+    if cfind_client is None:
+        pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
+
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-    if study:
-        cfind_date = study.get('StudyDate', '')
-        if cfind_date and cfind_date.strip():
-            print(f"  [OK] StudyDate was populated by Compass: {cfind_date}")
-        else:
-            print(f"  [INFO] StudyDate is still blank after Compass processing")
-        expected_date = original_acquisition_date or ''
-        if expected_date and cfind_date:
-            if cfind_date.strip() == expected_date.strip():
-                print(f"  [OK] StudyDate matches AcquisitionDate: {expected_date}")
-            else:
-                print(f"  [INFO] StudyDate ({cfind_date}) differs from AcquisitionDate ({expected_date})")
 
-    print(f"\n[SUCCESS] File sent without StudyDate/Time")
+    strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
+    cfind_date = study.get('StudyDate', '')
+    assert cfind_date and cfind_date.strip(), (
+        f"StudyDate was not populated by Compass after sending with blank StudyDate. "
+        f"Strategy used: '{strategy}'. "
+        f"C-FIND response keys: {list(study.keys())}."
+    )
+    print(f"  [OK] StudyDate was populated by Compass: {cfind_date}")
+
+    expected_date = original_acquisition_date or ''
+    if expected_date:
+        assert cfind_date.strip() == expected_date.strip(), (
+            f"StudyDate ({cfind_date.strip()}) does not match "
+            f"AcquisitionDate ({expected_date.strip()})"
+        )
+        print(f"  [OK] StudyDate matches AcquisitionDate: {expected_date}")
 
 
 @pytest.mark.integration
@@ -229,16 +235,20 @@ def test_iims_accession_number_generation(
     print(f"\n{'='*70}")
     print(f"C-FIND VERIFICATION")
     print(f"{'='*70}")
+    if cfind_client is None:
+        pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
+
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-    if study:
-        acc = study.get('AccessionNumber', '')
-        if acc and acc.strip():
-            print(f"  [OK] AccessionNumber populated by IIMS: {acc}")
-        else:
-            print(f"  [INFO] AccessionNumber still blank after Compass processing")
 
-    print(f"\n[SUCCESS] File sent with blank AccessionNumber")
+    strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
+    acc = study.get('AccessionNumber', '')
+    assert acc and acc.strip(), (
+        f"AccessionNumber was not populated by IIMS after sending with blank AccessionNumber. "
+        f"Strategy used: '{strategy}'. "
+        f"C-FIND response keys: {list(study.keys())}."
+    )
+    print(f"  [OK] AccessionNumber populated by IIMS: {acc}")
 
 
 @pytest.mark.integration
@@ -285,16 +295,25 @@ def test_pass_device_accession_number(
     
     # C-FIND verification
     print(f"\n[C-FIND VERIFICATION]")
+    if cfind_client is None:
+        pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
+
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-    if study:
-        acc = study.get('AccessionNumber', '')
-        if acc and acc.strip() == test_accession:
-            print(f"  [OK] AccessionNumber preserved: {acc}")
-        else:
-            print(f"  [WARN] AccessionNumber changed: expected {test_accession}, got '{acc}'")
 
-    print(f"\n[SUCCESS] File sent with device AccessionNumber")
+    strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
+    acc = study.get('AccessionNumber', '')
+    assert acc and acc.strip(), (
+        f"AccessionNumber not returned by C-FIND for study {ds.StudyInstanceUID}. "
+        f"Expected '{test_accession}' but got empty/missing value. "
+        f"Strategy used: '{strategy}'. "
+        f"C-FIND response keys: {list(study.keys())}."
+    )
+    assert acc.strip() == test_accession, (
+        f"AccessionNumber was not preserved: expected '{test_accession}', "
+        f"got '{acc.strip()}'"
+    )
+    print(f"  [OK] AccessionNumber preserved: {acc}")
 
 
 @pytest.mark.integration
@@ -334,6 +353,8 @@ def test_accession_number_edge_cases(
         },
     ]
     
+    failures = []
+
     for i, test_case in enumerate(test_cases, 1):
         print(f"\n[Test {i}/{len(test_cases)}]: {test_case['name']}")
         
@@ -344,7 +365,6 @@ def test_accession_number_edge_cases(
         ds.SeriesInstanceUID = generate_uid()
         ds.SOPInstanceUID = generate_uid()
         
-        # Apply test case modification
         test_case['action'](ds)
         
         accession_value = ds.AccessionNumber if hasattr(ds, 'AccessionNumber') else 'NOT_PRESENT'
@@ -353,20 +373,24 @@ def test_accession_number_edge_cases(
         
         dicom_sender._send_single_dataset(ds, metrics)
         
-        if metrics.successes == 1:
+        if metrics.successes != 1:
+            msg = f"Edge case '{test_case['name']}': send failed (error rate {metrics.error_rate:.1%})"
+            print(f"  Result: FAILED - {msg}")
+            failures.append(msg)
+        else:
             print(f"  Result: SUCCESS")
             print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
-            # C-FIND verification
-            patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-            study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-            if study:
+            if cfind_client is not None:
+                patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+                study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
                 acc = study.get('AccessionNumber', '')
                 print(f"  C-FIND AccessionNumber: '{acc}'")
-        else:
-            print(f"  Result: FAILED (may be expected)")
-            print(f"  Error rate: {metrics.error_rate:.1%}")
 
-        time.sleep(2)  # Brief pause between edge cases
+        time.sleep(2)
+
+    assert not failures, (
+        f"{len(failures)} edge case(s) failed:\n" + "\n".join(f"  - {f}" for f in failures)
+    )
 
 
 # ============================================================================
@@ -479,6 +503,8 @@ def test_special_characters_in_patient_data(
     print(f"SPECIAL CHARACTERS IN PATIENT DATA")
     print(f"{'='*70}")
     
+    failures = []
+
     for i, name in enumerate(test_names, 1):
         test_metrics = PerfMetrics()
         ds_copy = load_dataset(single_dicom_file)
@@ -497,9 +523,16 @@ def test_special_characters_in_patient_data(
             print(f"  Status: SUCCESS")
             print(f"  StudyUID: {ds_copy.StudyInstanceUID}")
         else:
+            msg = f"PatientName '{name}': send failed"
             print(f"  Status: FAILED")
+            failures.append(msg)
         
         time.sleep(1)
+
+    assert not failures, (
+        f"{len(failures)} special character case(s) failed:\n"
+        + "\n".join(f"  - {f}" for f in failures)
+    )
 
 
 # ============================================================================
@@ -546,22 +579,17 @@ def test_missing_modality_tag(
     
     dicom_sender._send_single_dataset(ds, metrics)
     
-    print(f"\n  Result:")
-    if metrics.successes == 1:
-        print(f"    Status: ACCEPTED (Compass accepted file without Modality)")
-        print(f"    This may indicate Compass is lenient with missing tags")
-    else:
-        print(f"    Status: REJECTED (expected - Modality is usually required)")
-        print(f"    Error rate: {metrics.error_rate:.1%}")
+    assert metrics.successes == 1, (
+        f"Compass rejected file with missing Modality tag "
+        f"(error rate {metrics.error_rate:.1%})"
+    )
+    print(f"  Result: ACCEPTED")
     
-    # C-FIND verification (informational)
-    if metrics.successes == 1:
+    # C-FIND verification
+    if cfind_client is not None:
         patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-        if study:
-            print(f"  [INFO] Study stored in Compass despite missing Modality")
-
-    print(f"\n  Note: DICOM standard requires Modality, but behavior varies by system")
+        verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
+        print(f"  [OK] Study stored in Compass despite missing Modality")
 
 
 # ============================================================================
