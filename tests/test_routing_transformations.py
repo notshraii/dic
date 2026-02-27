@@ -255,12 +255,10 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
     """
     print(f"\n  [AUTOMATED VERIFICATION VIA C-FIND]")
 
-    study_data = verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
+    if cfind_client is None:
+        pytest.skip("C-FIND verification is required for transformation tests (set CFIND_VERIFY=true)")
 
-    if study_data is None:
-        # verify_study_arrived returned None (CFIND_VERIFY=false)
-        print(f"  Skipped (C-FIND verification disabled)")
-        return
+    study_data = verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
 
     # Verify each expected attribute
     print(f"\n  Verifying expected transformations:")

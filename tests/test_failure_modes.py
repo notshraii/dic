@@ -171,13 +171,16 @@ def test_mcie_slow_send_one_at_a_time(
         print(f"\n[C-FIND VERIFICATION]")
         patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
-        if cfind_study:
+        if cfind_study is not None:
             instances = cfind_study.get('NumberOfStudyRelatedInstances')
-            if instances is not None:
-                count = int(instances)
-                assert count >= len(test_files), \
-                    f"Expected >= {len(test_files)} instances, got {count}"
-                print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
+            assert instances is not None, (
+                f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+                f"Response keys: {list(cfind_study.keys())}"
+            )
+            count = int(instances)
+            assert count >= len(test_files), \
+                f"Expected >= {len(test_files)} instances, got {count}"
+            print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
 
     finally:
         dicom_sender.endpoint.local_ae_title = original_aet
@@ -268,12 +271,13 @@ def test_send_duplicate_study_multiple_times(
     print(f"\n[C-FIND VERIFICATION]")
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     cfind_study = verify_study_arrived(cfind_client, str(fixed_study_uid), perf_config, patient_id=patient_id)
-    if cfind_study:
+    if cfind_study is not None:
         instances = cfind_study.get('NumberOfStudyRelatedInstances')
-        if instances is not None:
-            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
-
-    print(f"\n[SUCCESS] All {num_sends} duplicate sends accepted by Compass")
+        assert instances is not None, (
+            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+            f"Response keys: {list(cfind_study.keys())}"
+        )
+        print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
 
 
 @pytest.mark.integration
@@ -342,10 +346,14 @@ def test_resend_after_modifications(
     print(f"\n[C-FIND VERIFICATION]")
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
-    if cfind_study:
+    if cfind_study is not None:
         pn = cfind_study.get('PatientName', '')
-        print(f"  [INFO] PatientName in Compass: {pn}")
-        print(f"  [INFO] Original was '{original_patient}', modified was '{modified_patient}'")
+        assert pn, (
+            f"PatientName not returned by C-FIND after resend. "
+            f"Response keys: {list(cfind_study.keys())}"
+        )
+        print(f"  PatientName in Compass: {pn}")
+        print(f"  Original was '{original_patient}', modified was '{modified_patient}'")
 
 
 # ============================================================================
@@ -400,12 +408,13 @@ def test_send_with_variable_delays(
     print(f"\n[C-FIND VERIFICATION]")
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
-    if cfind_study:
+    if cfind_study is not None:
         instances = cfind_study.get('NumberOfStudyRelatedInstances')
-        if instances is not None:
-            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
-
-    print(f"\n[SUCCESS] All files sent and verified despite variable delays")
+        assert instances is not None, (
+            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+            f"Response keys: {list(cfind_study.keys())}"
+        )
+        print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
 
 
 # ============================================================================

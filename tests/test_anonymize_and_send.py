@@ -236,11 +236,14 @@ def test_anonymize_and_send_single_file(
     study = verify_study_arrived(
         cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
     )
-    if study:
+    if study is not None:
         instances = study.get('NumberOfStudyRelatedInstances')
-        if instances is not None:
-            assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
-            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+        assert instances is not None, (
+            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+            f"Response keys: {list(study.keys())}"
+        )
+        assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+        print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
 
     print(f"\n  [SUCCESS] ALL VERIFICATIONS PASSED")
     print(f"  Summary: {snapshot}")
@@ -298,11 +301,14 @@ def test_anonymize_and_send_from_shared_drive(
         study = verify_study_arrived(
             cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
         )
-        if study:
+        if study is not None:
             instances = study.get('NumberOfStudyRelatedInstances')
-            if instances is not None:
-                assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
-                print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+            assert instances is not None, (
+                f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+                f"Response keys: {list(study.keys())}"
+            )
+            assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
 
     finally:
         if os.path.exists(temp_dir):

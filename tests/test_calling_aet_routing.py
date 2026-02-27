@@ -128,10 +128,8 @@ def test_called_aet_routing(
         print(f"\n[C-FIND VERIFICATION]")
         patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         study = verify_study_arrived(cfind_client, test_study_uid, perf_config, patient_id=patient_id)
-        if study:
+        if study is not None:
             print(f"  [OK] Study confirmed in Compass for called AET: {called_aet}")
-
-        print(f"\n[RESULT: SEND AND VERIFICATION SUCCESSFUL]")
 
     finally:
         # Restore original AE title
@@ -276,7 +274,7 @@ def test_multiple_aets_batch_send(
             if r['called_aet'] not in verified_aets and r['success']:
                 verified_aets.add(r['called_aet'])
                 study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config, patient_id=r.get('patient_id'))
-                if study:
+                if study is not None:
                     print(f"  [OK] Verified sample study for AET {r['called_aet']}")
 
     finally:
@@ -449,7 +447,7 @@ def test_called_aet_with_modality_combinations(
         for r in results:
             if r['success']:
                 study = verify_study_arrived(cfind_client, str(r['study_uid']), perf_config, patient_id=r.get('patient_id'))
-                if study:
+                if study is not None:
                     print(f"  [OK] Verified {r['aet']} + {modality}")
 
     finally:
