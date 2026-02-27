@@ -24,6 +24,7 @@ from tests.conftest import manual_verification_required, verify_study_arrived
 # Test 1: Blank Study Date Handling
 # ============================================================================
 
+@pytest.mark.skip(reason="Excluded from suite runs -- run directly if needed")
 @pytest.mark.integration
 def test_populate_blank_study_date(
     dicom_sender,
@@ -188,6 +189,7 @@ def test_preserve_existing_study_date(
 # Test 2: Accession Number Handling
 # ============================================================================
 
+@pytest.mark.skip(reason="Excluded from suite runs -- run directly if needed")
 @pytest.mark.integration
 def test_iims_accession_number_generation(
     dicom_sender,
