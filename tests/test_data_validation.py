@@ -388,9 +388,14 @@ def test_accession_number_edge_cases(
             print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
             if cfind_client is not None:
                 patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-                study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-                acc = study.get('AccessionNumber', '')
-                print(f"  C-FIND AccessionNumber: '{acc}'")
+                try:
+                    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
+                    acc = study.get('AccessionNumber', '')
+                    print(f"  C-FIND AccessionNumber: '{acc}'")
+                except AssertionError as e:
+                    msg = f"Edge case '{test_case['name']}': study not found via C-FIND ({e})"
+                    print(f"  C-FIND: FAILED - {msg}")
+                    failures.append(msg)
 
         time.sleep(2)
 
