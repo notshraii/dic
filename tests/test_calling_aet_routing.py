@@ -290,19 +290,13 @@ def test_unknown_called_aet(
     single_dicom_file,
     dicom_sender,
     metrics: PerfMetrics,
-    cfind_client,
-    perf_config,
 ):
     """
-    Test sending to an unknown/unregistered called AE Title.
+    Test that Compass rejects a send to an unknown/unregistered called AE Title.
 
-    This verifies Compass behavior when sending to an unexpected destination.
-    Expected behavior depends on Compass configuration:
-    - May accept and route to default destination
-    - May reject with error
-    - May accept but flag for review
-
-    This test documents the actual behavior without failing.
+    Expected behavior: Compass should reject the association or refuse the
+    C-STORE when the called AET is not configured, ensuring studies are not
+    silently routed to an unintended destination.
     """
     unknown_aet = 'UNKNOWN_TEST_AET'
 
@@ -317,7 +311,6 @@ def test_unknown_called_aet(
     ds.SeriesInstanceUID = generate_uid()
     ds.SOPInstanceUID = generate_uid()
 
-    # Add marker
     study_desc = f"UNKNOWN_AET_TEST_{unknown_aet}"
     if hasattr(ds, 'StudyDescription'):
         ds.StudyDescription = study_desc
@@ -334,38 +327,14 @@ def test_unknown_called_aet(
         dicom_sender._send_single_dataset(ds, metrics)
 
         print(f"\n[RESULT]")
-        if metrics.successes == 1:
-            print(f"  Status: ACCEPTED")
-            print(f"  Compass accepted unknown called AET '{unknown_aet}'")
-            print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
-            print(f"\n  [VERIFY] Check how Compass handled this unknown destination:")
-            print(f"    - StudyInstanceUID: {test_study_uid}")
-            print(f"    - Was it routed to a default destination?")
-            print(f"    - Was it flagged for review?")
-            print(f"    - Was it processed differently than known destinations?")
-        else:
-            print(f"  Status: REJECTED")
-            print(f"  Compass rejected unknown called AET '{unknown_aet}'")
-            print(f"  This may be expected behavior for security reasons")
-            print(f"  Error rate: {metrics.error_rate:.1%}")
-            print(f"  Failures: {metrics.failures}")
+        print(f"  Successes: {metrics.successes}, Failures: {metrics.failures}")
 
-        # C-FIND verification (non-failing — documents whether Compass stored it)
-        if metrics.successes == 1 and cfind_client is not None:
-            print(f"\n[C-FIND VERIFICATION (informational)]")
-            patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-            try:
-                study = verify_study_arrived(cfind_client, test_study_uid, perf_config, patient_id=patient_id)
-                if study:
-                    print(f"  Study WAS stored in Compass despite unknown AET")
-            except AssertionError:
-                print(f"  Study was NOT found via C-FIND (may not have been stored)")
-
-        # Document the behavior, but don't fail test
-        print(f"\n[DOCUMENTED BEHAVIOR]")
-        behavior = 'ACCEPTED' if metrics.successes == 1 else 'REJECTED'
-        print(f"  Unknown called AET '{unknown_aet}' was {behavior} by Compass")
-        print(f"  This documents current Compass configuration for unknown destinations")
+        assert metrics.failures >= 1, (
+            f"Compass ACCEPTED unknown called AET '{unknown_aet}' — "
+            f"expected rejection. Study {test_study_uid} may have been "
+            f"routed to an unintended destination."
+        )
+        print(f"  Compass correctly rejected unknown called AET '{unknown_aet}'")
 
     finally:
         dicom_sender.endpoint.remote_ae_title = original_aet
