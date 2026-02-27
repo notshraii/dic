@@ -213,22 +213,24 @@ def verify_study_arrived(
 def manual_verification_required(description: str):
     """Wrap assertions that require manual verification if they fail.
 
-    The test still hard-fails (for automation), but the output includes a
-    prominent banner so humans reviewing the results can immediately see
-    that the failure has been verified manually on the server.
+    The test still hard-fails (for automation), but the assertion message
+    includes a prominent banner so it is visible in pytest output regardless
+    of -s or --tb settings.
     """
     try:
         yield
     except AssertionError as e:
-        print(f"\n{'!'*70}")
-        print(f"  MANUAL VERIFICATION REQUIRED")
-        print(f"{'!'*70}")
-        print(f"  {description}")
-        print(f"  Automated check failed: {e}")
-        print(f"  This test passes when verified manually on the server.")
-        print(f"  Check the C-FIND strategy and server-side data directly.")
-        print(f"{'!'*70}\n")
-        raise
+        banner = (
+            f"\n{'!'*70}\n"
+            f"  MANUAL VERIFICATION REQUIRED\n"
+            f"{'!'*70}\n"
+            f"  {description}\n"
+            f"  Automated check failed: {e}\n"
+            f"  This test passes when verified manually on the server.\n"
+            f"  Check the C-FIND strategy and server-side data directly.\n"
+            f"{'!'*70}"
+        )
+        raise AssertionError(banner) from e
 
 
 # ============================================================================
