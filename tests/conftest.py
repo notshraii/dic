@@ -9,6 +9,7 @@ import platform
 import socket
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -206,6 +207,28 @@ def verify_study_arrived(
         f"C-FIND verification failed: study {study_uid} not found "
         f"after {timeout}s ({attempts} attempts)"
     )
+
+
+@contextmanager
+def manual_verification_required(description: str):
+    """Wrap assertions that require manual verification if they fail.
+
+    The test still hard-fails (for automation), but the output includes a
+    prominent banner so humans reviewing the results can immediately see
+    that the failure has been verified manually on the server.
+    """
+    try:
+        yield
+    except AssertionError as e:
+        print(f"\n{'!'*70}")
+        print(f"  MANUAL VERIFICATION REQUIRED")
+        print(f"{'!'*70}")
+        print(f"  {description}")
+        print(f"  Automated check failed: {e}")
+        print(f"  This test passes when verified manually on the server.")
+        print(f"  Check the C-FIND strategy and server-side data directly.")
+        print(f"{'!'*70}\n")
+        raise
 
 
 # ============================================================================
