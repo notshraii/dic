@@ -177,6 +177,8 @@ class CompassCFindClient:
             ds.PatientName = ""
             ds.StudyDate = ""
             ds.AccessionNumber = ""
+            ds.StudyDescription = ""
+            ds.ModalitiesInStudy = ""
             ds.NumberOfStudyRelatedInstances = ""
 
             logger.info(f"Querying for study (model={model}, level=STUDY): {study_uid}")
