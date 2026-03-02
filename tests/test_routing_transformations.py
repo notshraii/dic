@@ -259,10 +259,18 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
         pytest.skip("C-FIND verification is required for transformation tests (set CFIND_VERIFY=true)")
 
     study_data = verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
+    strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
+    is_patient_level = "PATIENT level" in strategy
+
+    if is_patient_level:
+        print(f"\n  [WARNING] C-FIND resolved via PATIENT-level query ({strategy}).")
+        print(f"  PATIENT-level results do not include study attributes like StudyDescription.")
+        print(f"  Study-level verification requires STUDY-level C-FIND support on the server.")
 
     # Verify each expected attribute
     print(f"\n  Verifying expected transformations:")
 
+    missing_attrs = []
     for attr_name, expected_value in expected_attributes.items():
         # Convert snake_case to PascalCase DICOM attribute name
         dicom_attr = ''.join(word.capitalize() for word in attr_name.split('_'))
@@ -271,9 +279,7 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
 
         if actual_value is None:
             print(f"    {dicom_attr}: NOT FOUND in C-FIND response")
-            raise AssertionError(
-                f"{dicom_attr} not found in C-FIND response for study {study_uid}"
-            )
+            missing_attrs.append(dicom_attr)
         elif str(actual_value).strip() == str(expected_value).strip():
             print(f"    {dicom_attr}: '{actual_value}' - MATCH")
         else:
@@ -282,6 +288,19 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
             raise AssertionError(
                 f"{dicom_attr} mismatch: expected '{expected_value}', got '{actual_value}'"
             )
+
+    if missing_attrs:
+        if is_patient_level:
+            pytest.skip(
+                f"C-FIND server only supports PATIENT-level queries (strategy: {strategy}). "
+                f"Cannot verify study-level attributes: {', '.join(missing_attrs)}. "
+                f"Verify transformations manually on the Compass server or configure "
+                f"a C-FIND server that supports STUDY-level queries."
+            )
+        raise AssertionError(
+            f"Attributes not found in C-FIND response for study {study_uid}: "
+            f"{', '.join(missing_attrs)}"
+        )
 
     print(f"\n  C-FIND VERIFICATION PASSED - All transformations correct!")
 
