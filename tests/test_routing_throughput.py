@@ -6,6 +6,7 @@ Throughput tests that verify Compass routing performance at target images-per-se
 
 from __future__ import annotations
 
+import copy
 import itertools
 import tempfile
 import shutil
@@ -49,13 +50,7 @@ def create_anonymized_variant(ds):
     Create an anonymized copy of a dataset with unique UIDs.
     Returns a new dataset object (doesn't modify original).
     """
-    # Create a deep copy by re-reading if possible, otherwise use as-is
-    if hasattr(ds, 'filename') and ds.filename:
-        ds_copy = dcmread(ds.filename)
-    else:
-        # If no filename, work with the dataset directly (it's already loaded)
-        # We'll need to work with it as-is since we can't deep copy easily
-        ds_copy = ds
+    ds_copy = copy.deepcopy(ds)
     
     # Generate new unique identifiers
     new_study_uid = generate_uid()

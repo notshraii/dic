@@ -126,7 +126,10 @@ class DicomSender:
         stop_at = time.perf_counter() + duration_seconds
         total_sent = 0
 
-        ds_cycle = itertools.cycle(datasets)
+        if hasattr(datasets, '__len__'):
+            ds_iter = itertools.cycle(datasets)
+        else:
+            ds_iter = iter(datasets)
         executor = ThreadPoolExecutor(max_workers=concurrency)
         futures = []
 
@@ -140,7 +143,7 @@ class DicomSender:
                     time.sleep(max(next_send_time - now, 0.0))
                 next_send_time = time.perf_counter() + period
 
-                ds = next(ds_cycle)
+                ds = next(ds_iter)
                 future = executor.submit(self._send_single_dataset, ds, metrics)
                 futures.append(future)
                 with lock:
