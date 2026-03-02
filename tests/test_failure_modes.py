@@ -105,7 +105,7 @@ def test_send_with_2min_pause_between_files(
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_mcie_slow_send_one_at_a_time(
+def test_slow_send_one_at_a_time(
     dicom_sender,
     small_dicom_files: List[Path],
     metrics: PerfMetrics,
@@ -113,16 +113,15 @@ def test_mcie_slow_send_one_at_a_time(
     perf_config,
 ):
     """
-    COMPASS_FailureMode_DelayDuringMCIESend
+    COMPASS_FailureMode_DelayDuringSend_Slow
     
-    Send images one at a time with delay (MCIE scenario).
+    Send images one at a time with delay.
     Verifies images are routed to MIDIA and InfinityView despite slow send.
     
     Expected Result: Images routed to MIDIA and InfinityView
     
     Test Steps:
-    1. Set calling AET to MCIE variant
-    2. Send files one at a time with 30-second delays
+    1. Send files one at a time with 30-second delays
     3. Verify all files sent successfully
     4. C-FIND verification: Confirm study arrived with correct instance count
     """
@@ -130,60 +129,52 @@ def test_mcie_slow_send_one_at_a_time(
     test_files = small_dicom_files[:5]  # Limit to 5 files
     
     print(f"\n{'='*70}")
-    print(f"MCIE SLOW SEND TEST: {len(test_files)} files")
+    print(f"SLOW SEND TEST: {len(test_files)} files")
     print(f"{'='*70}")
     
-    # Override to MCIE AET
-    original_aet = dicom_sender.endpoint.local_ae_title
-    dicom_sender.endpoint.local_ae_title = 'MCIE_TEST_SLOW'
+    study_uid = generate_uid()  # Same study for all images
     
-    try:
-        study_uid = generate_uid()  # Same study for all images
+    for i, file in enumerate(test_files, 1):
+        ds = load_dataset(file)
         
-        for i, file in enumerate(test_files, 1):
-            ds = load_dataset(file)
-            
-            # Same study, different series/SOP for each file
-            ds.StudyInstanceUID = study_uid
-            ds.SeriesInstanceUID = generate_uid()
-            ds.SOPInstanceUID = generate_uid()
-            
-            print(f"\n[{i}/{len(test_files)}] Sending image {i} of study")
-            print(f"  File: {file.name}")
-            
-            dicom_sender._send_single_dataset(ds, metrics)
-            
-            if i < len(test_files):
-                print(f"  Waiting {delay_seconds}s before next image...")
-                time.sleep(delay_seconds)
+        # Same study, different series/SOP for each file
+        ds.StudyInstanceUID = study_uid
+        ds.SeriesInstanceUID = generate_uid()
+        ds.SOPInstanceUID = generate_uid()
         
-        print(f"\n{'='*70}")
-        print(f"RESULTS")
-        print(f"{'='*70}")
-        print(f"  StudyInstanceUID: {study_uid}")
-        print(f"  Total images sent: {metrics.successes}")
-        print(f"  Failures: {metrics.failures}")
+        print(f"\n[{i}/{len(test_files)}] Sending image {i} of study")
+        print(f"  File: {file.name}")
         
-        assert metrics.successes == len(test_files)
-        assert metrics.error_rate == 0
+        dicom_sender._send_single_dataset(ds, metrics)
         
-        # C-FIND verification
-        print(f"\n[C-FIND VERIFICATION]")
-        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-        cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
-        if cfind_study is not None:
-            instances = cfind_study.get('NumberOfStudyRelatedInstances')
-            assert instances is not None, (
-                f"NumberOfStudyRelatedInstances not returned by C-FIND. "
-                f"Response keys: {list(cfind_study.keys())}"
-            )
-            count = int(instances)
-            assert count >= len(test_files), \
-                f"Expected >= {len(test_files)} instances, got {count}"
-            print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
-
-    finally:
-        dicom_sender.endpoint.local_ae_title = original_aet
+        if i < len(test_files):
+            print(f"  Waiting {delay_seconds}s before next image...")
+            time.sleep(delay_seconds)
+    
+    print(f"\n{'='*70}")
+    print(f"RESULTS")
+    print(f"{'='*70}")
+    print(f"  StudyInstanceUID: {study_uid}")
+    print(f"  Total images sent: {metrics.successes}")
+    print(f"  Failures: {metrics.failures}")
+    
+    assert metrics.successes == len(test_files)
+    assert metrics.error_rate == 0
+    
+    # C-FIND verification
+    print(f"\n[C-FIND VERIFICATION]")
+    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
+    if cfind_study is not None:
+        instances = cfind_study.get('NumberOfStudyRelatedInstances')
+        assert instances is not None, (
+            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+            f"Response keys: {list(cfind_study.keys())}"
+        )
+        count = int(instances)
+        assert count >= len(test_files), \
+            f"Expected >= {len(test_files)} instances, got {count}"
+        print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
 
 
 # ============================================================================
@@ -199,7 +190,7 @@ def test_send_duplicate_study_multiple_times(
     perf_config,
 ):
     """
-    COMPASS_FailureMode_SendDuplicateMCIEStudy
+    COMPASS_FailureMode_SendDuplicateStudy
     
     Send the same study multiple times.
     Verifies Compass handles duplicate sends appropriately.
