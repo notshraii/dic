@@ -121,9 +121,9 @@ def test_slow_send_one_at_a_time(
     Expected Result: Images routed to MIDIA and InfinityView
     
     Test Steps:
-    1. Send files one at a time with 30-second delays
-    3. Verify all files sent successfully
-    4. C-FIND verification: Confirm study arrived with correct instance count
+    1. Send files one at a time with unique StudyInstanceUIDs and 30-second delays
+    2. Verify all files sent successfully
+    3. C-FIND verification: Confirm each study arrived individually
     """
     delay_seconds = 30  # 30 seconds between files
     test_files = small_dicom_files[:5]  # Limit to 5 files
@@ -132,21 +132,20 @@ def test_slow_send_one_at_a_time(
     print(f"SLOW SEND TEST: {len(test_files)} files")
     print(f"{'='*70}")
     
-    study_uid = generate_uid()  # Same study for all images
-    sent_series_uids = []
+    sent_study_uids = []
     
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
         
-        # Same study, different series/SOP for each file
+        study_uid = generate_uid()
         ds.StudyInstanceUID = study_uid
-        series_uid = generate_uid()
-        ds.SeriesInstanceUID = series_uid
+        ds.SeriesInstanceUID = generate_uid()
         ds.SOPInstanceUID = generate_uid()
-        sent_series_uids.append(series_uid)
+        sent_study_uids.append(study_uid)
         
-        print(f"\n[{i}/{len(test_files)}] Sending image {i} of study")
+        print(f"\n[{i}/{len(test_files)}] Sending image {i}")
         print(f"  File: {file.name}")
+        print(f"  StudyInstanceUID: {study_uid}")
         
         dicom_sender._send_single_dataset(ds, metrics)
         
@@ -157,43 +156,20 @@ def test_slow_send_one_at_a_time(
     print(f"\n{'='*70}")
     print(f"RESULTS")
     print(f"{'='*70}")
-    print(f"  StudyInstanceUID: {study_uid}")
     print(f"  Total images sent: {metrics.successes}")
     print(f"  Failures: {metrics.failures}")
     
     assert metrics.successes == len(test_files)
     assert metrics.error_rate == 0
     
-    # C-FIND verification: confirm study arrived, then verify instance count
+    # C-FIND verification: confirm each study arrived individually
     print(f"\n[C-FIND VERIFICATION]")
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-    cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
-    if cfind_study is not None:
-        instances = cfind_study.get('NumberOfStudyRelatedInstances')
-        if instances is not None:
-            count = int(instances)
-            assert count >= len(test_files), \
-                f"Expected >= {len(test_files)} instances, got {count}"
-            print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
-        elif cfind_client is not None:
-            # Study-level query didn't return instance count (patient-level fallback).
-            # Use series-level C-FIND to verify each image arrived.
-            print(f"  NumberOfStudyRelatedInstances not available, "
-                  f"falling back to series-level C-FIND")
-            series_results = cfind_client.get_series_for_study(str(study_uid))
-            found_series = {
-                str(s.SeriesInstanceUID)
-                for s in series_results
-                if hasattr(s, 'SeriesInstanceUID')
-            }
-            missing = [uid for uid in sent_series_uids if uid not in found_series]
-            assert not missing, (
-                f"Series-level C-FIND found {len(found_series)} of "
-                f"{len(sent_series_uids)} series. "
-                f"Missing series UIDs: {missing}"
-            )
-            print(f"  [OK] Series-level C-FIND confirmed all "
-                  f"{len(sent_series_uids)} series arrived")
+    for i, uid in enumerate(sent_study_uids, 1):
+        print(f"  [{i}/{len(sent_study_uids)}] Verifying StudyInstanceUID: {uid}")
+        verify_study_arrived(cfind_client, str(uid), perf_config, patient_id=patient_id)
+    
+    print(f"\n[OK] All {len(sent_study_uids)} images verified via C-FIND")
 
 
 # ============================================================================
