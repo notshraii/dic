@@ -154,14 +154,11 @@ class CompassCFindClient:
         Find a study by Study Instance UID.
 
         Strategy (in order):
-        1. Patient Root STUDY level by StudyInstanceUID.
-        2. Study Root STUDY level by StudyInstanceUID.
-        3. STUDY level by PatientID (requires patient_id) — for servers that
-           reject StudyInstanceUID filters but accept PatientID at STUDY level.
-           Returns full study attributes; matches target UID client-side.
-        4. Patient Root PATIENT level (requires patient_id) — last resort for
-           servers that only support PATIENT-level queries. Returns patient-level
-           data only (no StudyDescription, AccessionNumber, etc.).
+        1. Patient Root STUDY level — some servers require this model.
+        2. Study Root STUDY level — most servers support this.
+        3. Patient Root PATIENT level (requires patient_id) — fallback for servers
+           that only support Patient Root at the patient level (e.g. TEAMINT_SCP).
+           Returns a patient-level dataset confirming the patient exists on the server.
 
         After a successful find, ``self.last_find_strategy`` is set to a short
         description of the strategy that matched (useful for diagnostics).
@@ -180,8 +177,6 @@ class CompassCFindClient:
             ds.PatientName = ""
             ds.StudyDate = ""
             ds.AccessionNumber = ""
-            ds.StudyDescription = ""
-            ds.ModalitiesInStudy = ""
             ds.NumberOfStudyRelatedInstances = ""
 
             logger.info(f"Querying for study (model={model}, level=STUDY): {study_uid}")
@@ -195,45 +190,9 @@ class CompassCFindClient:
             except Exception as e:
                 logger.warning(f"C-FIND with model={model} level=STUDY failed: {e}")
 
-        # Strategy 3: STUDY-level query by PatientID (requires patient_id).
-        # Some servers reject STUDY-level queries filtered by StudyInstanceUID
-        # but accept them when filtered by PatientID. We match the target study
-        # client-side from the results, which include full study attributes.
-        if patient_id:
-            for model in ("PATIENT", "STUDY"):
-                strategy_label = f"{model} Root, STUDY level by PatientID"
-                self.config.query_model = model
-                ds = Dataset()
-                ds.QueryRetrieveLevel = "STUDY"
-                ds.PatientID = patient_id
-                ds.StudyInstanceUID = ""
-                ds.PatientName = ""
-                ds.StudyDate = ""
-                ds.AccessionNumber = ""
-                ds.StudyDescription = ""
-                ds.ModalitiesInStudy = ""
-                ds.NumberOfStudyRelatedInstances = ""
-
-                logger.info(f"Querying studies by PatientID={patient_id} (model={model}, level=STUDY)")
-                try:
-                    results = self._execute_find(ds)
-                    for r in results:
-                        if hasattr(r, 'StudyInstanceUID') and str(r.StudyInstanceUID) == study_uid:
-                            self.last_find_strategy = strategy_label
-                            logger.info(f"Study found via strategy: {strategy_label}")
-                            self.config.query_model = original_model
-                            return r
-                    if results:
-                        logger.info(
-                            f"PatientID query returned {len(results)} study/studies "
-                            f"but none matched StudyInstanceUID {study_uid}"
-                        )
-                except Exception as e:
-                    logger.warning(f"C-FIND with model={model} level=STUDY by PatientID failed: {e}")
-
-        # Strategy 4: Patient Root PATIENT-level fallback.
+        # Strategy 3: Patient Root PATIENT-level fallback.
         # WARNING: PATIENT-level results do NOT contain study-level attributes
-        # (StudyDate, AccessionNumber, StudyDescription, etc.).
+        # (StudyDate, AccessionNumber, StudyInstanceUID, etc.).
         if patient_id:
             strategy_label = "PATIENT Root, PATIENT level (fallback - no study attributes)"
             self.config.query_model = "PATIENT"
