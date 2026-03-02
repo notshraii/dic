@@ -133,14 +133,17 @@ def test_slow_send_one_at_a_time(
     print(f"{'='*70}")
     
     study_uid = generate_uid()  # Same study for all images
+    sent_series_uids = []
     
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
         
         # Same study, different series/SOP for each file
         ds.StudyInstanceUID = study_uid
-        ds.SeriesInstanceUID = generate_uid()
+        series_uid = generate_uid()
+        ds.SeriesInstanceUID = series_uid
         ds.SOPInstanceUID = generate_uid()
+        sent_series_uids.append(series_uid)
         
         print(f"\n[{i}/{len(test_files)}] Sending image {i} of study")
         print(f"  File: {file.name}")
@@ -161,20 +164,36 @@ def test_slow_send_one_at_a_time(
     assert metrics.successes == len(test_files)
     assert metrics.error_rate == 0
     
-    # C-FIND verification
+    # C-FIND verification: confirm study arrived, then verify instance count
     print(f"\n[C-FIND VERIFICATION]")
     patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
     cfind_study = verify_study_arrived(cfind_client, str(study_uid), perf_config, patient_id=patient_id)
     if cfind_study is not None:
         instances = cfind_study.get('NumberOfStudyRelatedInstances')
-        assert instances is not None, (
-            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
-            f"Response keys: {list(cfind_study.keys())}"
-        )
-        count = int(instances)
-        assert count >= len(test_files), \
-            f"Expected >= {len(test_files)} instances, got {count}"
-        print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
+        if instances is not None:
+            count = int(instances)
+            assert count >= len(test_files), \
+                f"Expected >= {len(test_files)} instances, got {count}"
+            print(f"  [OK] NumberOfStudyRelatedInstances: {count}")
+        elif cfind_client is not None:
+            # Study-level query didn't return instance count (patient-level fallback).
+            # Use series-level C-FIND to verify each image arrived.
+            print(f"  NumberOfStudyRelatedInstances not available, "
+                  f"falling back to series-level C-FIND")
+            series_results = cfind_client.get_series_for_study(str(study_uid))
+            found_series = {
+                str(s.SeriesInstanceUID)
+                for s in series_results
+                if hasattr(s, 'SeriesInstanceUID')
+            }
+            missing = [uid for uid in sent_series_uids if uid not in found_series]
+            assert not missing, (
+                f"Series-level C-FIND found {len(found_series)} of "
+                f"{len(sent_series_uids)} series. "
+                f"Missing series UIDs: {missing}"
+            )
+            print(f"  [OK] Series-level C-FIND confirmed all "
+                  f"{len(sent_series_uids)} series arrived")
 
 
 # ============================================================================
