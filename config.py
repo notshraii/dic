@@ -174,7 +174,7 @@ class IntegrationTestConfig:
     cfind_initial_delay: float = 5.0      # Seconds to wait before first C-FIND attempt
     cfind_timeout: int = 60               # Poll timeout in seconds
     cfind_poll_interval: float = 5.0      # Poll interval in seconds
-    iims_remote_ae_title: str = "CLINICAL_SCP"  # Called AE for IIMS accession number test
+    iims_cfind_ae_title: str = "CLINICAL_SCP"  # Called AE for C-FIND verification against MIDIA
 
     @classmethod
     def from_env(cls) -> "IntegrationTestConfig":
@@ -185,7 +185,7 @@ class IntegrationTestConfig:
             cfind_initial_delay=_env_float("CFIND_INITIAL_DELAY", 5.0),
             cfind_timeout=_env_int("CFIND_TIMEOUT", 60),
             cfind_poll_interval=_env_float("CFIND_POLL_INTERVAL", 5.0),
-            iims_remote_ae_title=_env_str("IIMS_REMOTE_AE_TITLE", "CLINICAL_SCP"),
+            iims_cfind_ae_title=_env_str("IIMS_CFIND_AE_TITLE", "CLINICAL_SCP"),
         )
 
 

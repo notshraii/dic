@@ -200,17 +200,19 @@ def test_iims_accession_number_generation(
     """
     COMPASS_APICall_GetIIMSAccessionNumber
     
-    Send study with blank accession number via the CLINICAL_SCP AE title.
-    Verify IIMS web service is called and accession number is populated.
+    Send study with blank accession number to the storage SCP (default route).
+    Compass calls IIMS to generate an accession number and routes to MIDIA.
+    Verify via C-FIND against CLINICAL_SCP (MIDIA query AE) that the
+    accession number was populated.
     
     Expected Result: IIMS web service called; accession number populated
     
     Test Steps:
     1. Load DICOM file
     2. Set AccessionNumber to empty string
-    3. Send to Compass using IIMS_REMOTE_AE_TITLE (CLINICAL_SCP)
+    3. C-STORE to default route AE (storage SCP triggers IIMS)
     4. Verify send succeeds
-    5. C-FIND verification: Query for study and check AccessionNumber
+    5. C-FIND against CLINICAL_SCP (MIDIA): check AccessionNumber populated
     """
     ds = load_dataset(single_dicom_file)
     
@@ -221,36 +223,37 @@ def test_iims_accession_number_generation(
     # Set accession number to blank
     ds.AccessionNumber = ''
     
-    iims_ae = perf_config.integration.iims_remote_ae_title
-    default_ae = dicom_sender.endpoint.remote_ae_title
-    
     print(f"\n{'='*70}")
     print(f"BLANK ACCESSION NUMBER TEST")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
     print(f"  AccessionNumber: '' (blank)")
-    print(f"  Remote AE override: {default_ae} -> {iims_ae}")
+    print(f"  C-STORE AE (storage): {dicom_sender.endpoint.remote_ae_title}")
     print(f"\n  Expecting IIMS web service to be called...")
     
-    # Override remote AE to the IIMS/clinical SCP for this send
-    dicom_sender.endpoint.remote_ae_title = iims_ae
-    try:
-        dicom_sender._send_single_dataset(ds, metrics)
-    finally:
-        dicom_sender.endpoint.remote_ae_title = default_ae
+    # Send to storage SCP using default route AE (triggers IIMS processing)
+    dicom_sender._send_single_dataset(ds, metrics)
     
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
-    # C-FIND verification
+    # C-FIND verification against CLINICAL_SCP (MIDIA query endpoint)
     print(f"\n{'='*70}")
-    print(f"C-FIND VERIFICATION")
+    print(f"C-FIND VERIFICATION (MIDIA via CLINICAL_SCP)")
     print(f"{'='*70}")
     if cfind_client is None:
         pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
 
-    patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-    study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
+    iims_cfind_ae = perf_config.integration.iims_cfind_ae_title
+    default_cfind_ae = cfind_client.config.remote_ae_title
+    print(f"  C-FIND AE override: {default_cfind_ae} -> {iims_cfind_ae}")
+
+    cfind_client.config.remote_ae_title = iims_cfind_ae
+    try:
+        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
+    finally:
+        cfind_client.config.remote_ae_title = default_cfind_ae
 
     strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
     acc = study.get('AccessionNumber', '')
