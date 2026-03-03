@@ -221,19 +221,17 @@ def test_iims_accession_number_generation(
     ds.SeriesInstanceUID = generate_uid()
     ds.SOPInstanceUID = generate_uid()
     
-    # Remove AccessionNumber tag entirely so Compass treats it as absent
-    if 'AccessionNumber' in ds:
-        del ds.AccessionNumber
+    # Set accession number to empty string
+    ds.AccessionNumber = ''
     
     iims_scu = perf_config.integration.iims_scu_ae_title
     default_local_ae = dicom_sender.endpoint.local_ae_title
     
-    has_tag = hasattr(ds, 'AccessionNumber')
     print(f"\n{'='*70}")
     print(f"BLANK ACCESSION NUMBER TEST")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  AccessionNumber tag present: {has_tag}")
+    print(f"  AccessionNumber: '' (empty string)")
     print(f"  Called AE (SCP): {dicom_sender.endpoint.remote_ae_title}")
     print(f"  Calling AE (SCU) override: {default_local_ae} -> {iims_scu}")
     print(f"\n  Expecting IIMS web service to be called...")
