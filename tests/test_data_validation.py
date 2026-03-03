@@ -256,15 +256,22 @@ def test_iims_accession_number_generation(
         pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
 
     iims_cfind_ae = perf_config.integration.iims_cfind_ae_title
+    iims_scu = perf_config.integration.iims_scu_ae_title
     default_cfind_ae = cfind_client.config.remote_ae_title
-    print(f"  C-FIND AE override: {default_cfind_ae} -> {iims_cfind_ae}")
+    default_cfind_local = cfind_client.config.local_ae_title
+    print(f"  C-FIND Called AE override: {default_cfind_ae} -> {iims_cfind_ae}")
+    print(f"  C-FIND Calling AE override: {default_cfind_local} -> {iims_scu}")
 
     cfind_client.config.remote_ae_title = iims_cfind_ae
+    cfind_client.config.local_ae_title = iims_scu
+    cfind_client.ae.ae_title = iims_scu
     try:
         patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
     finally:
         cfind_client.config.remote_ae_title = default_cfind_ae
+        cfind_client.config.local_ae_title = default_cfind_local
+        cfind_client.ae.ae_title = default_cfind_local
 
     strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
     acc = study.get('AccessionNumber', '')
