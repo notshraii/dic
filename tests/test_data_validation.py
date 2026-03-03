@@ -189,7 +189,6 @@ def test_preserve_existing_study_date(
 # Test 2: Accession Number Handling
 # ============================================================================
 
-@pytest.mark.skip(reason="Excluded from suite runs -- run directly if needed")
 @pytest.mark.integration
 def test_iims_accession_number_generation(
     dicom_sender,
@@ -201,7 +200,7 @@ def test_iims_accession_number_generation(
     """
     COMPASS_APICall_GetIIMSAccessionNumber
     
-    Send study with blank accession number.
+    Send study with blank accession number via the CLINICAL_SCP AE title.
     Verify IIMS web service is called and accession number is populated.
     
     Expected Result: IIMS web service called; accession number populated
@@ -209,7 +208,7 @@ def test_iims_accession_number_generation(
     Test Steps:
     1. Load DICOM file
     2. Set AccessionNumber to empty string
-    3. Send to Compass
+    3. Send to Compass using IIMS_REMOTE_AE_TITLE (CLINICAL_SCP)
     4. Verify send succeeds
     5. C-FIND verification: Query for study and check AccessionNumber
     """
@@ -222,15 +221,23 @@ def test_iims_accession_number_generation(
     # Set accession number to blank
     ds.AccessionNumber = ''
     
+    iims_ae = perf_config.integration.iims_remote_ae_title
+    default_ae = dicom_sender.endpoint.remote_ae_title
+    
     print(f"\n{'='*70}")
     print(f"BLANK ACCESSION NUMBER TEST")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
     print(f"  AccessionNumber: '' (blank)")
+    print(f"  Remote AE override: {default_ae} -> {iims_ae}")
     print(f"\n  Expecting IIMS web service to be called...")
     
-    # Send to Compass
-    dicom_sender._send_single_dataset(ds, metrics)
+    # Override remote AE to the IIMS/clinical SCP for this send
+    dicom_sender.endpoint.remote_ae_title = iims_ae
+    try:
+        dicom_sender._send_single_dataset(ds, metrics)
+    finally:
+        dicom_sender.endpoint.remote_ae_title = default_ae
     
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
