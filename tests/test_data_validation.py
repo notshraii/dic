@@ -200,20 +200,19 @@ def test_iims_accession_number_generation(
     """
     COMPASS_APICall_GetIIMSAccessionNumber
     
-    Send study with blank accession number using TEAM_SCP as the calling AE
-    (SCU). The SCU determines routing rules -- TEAM_SCP triggers the IIMS
-    web service call to generate an accession number. After processing,
-    Compass routes the study to MIDIA. Verify via C-FIND against
-    CLINICAL_SCP that the accession number was populated.
+    Send study with blank accession number to the non-ordered studies route
+    (SCU=TEAM_SCP, SCP=LB-HTM-IM). This route triggers the IIMS web service
+    to generate an accession number. Verify via C-FIND against CLINICAL_SCP
+    that the accession number was populated.
     
     Expected Result: IIMS web service called; accession number populated
     
     Test Steps:
     1. Load DICOM file
     2. Set AccessionNumber to empty string
-    3. C-STORE with SCU=TEAM_SCP (triggers IIMS routing rule)
+    3. C-STORE: SCU=TEAM_SCP -> SCP=LB-HTM-IM (non-ordered studies route)
     4. Verify send succeeds
-    5. C-FIND against CLINICAL_SCP (MIDIA): check AccessionNumber populated
+    5. C-FIND: SCU=TEAM_SCP -> SCP=CLINICAL_SCP, check AccessionNumber
     """
     ds = load_dataset(single_dicom_file)
     
@@ -225,23 +224,27 @@ def test_iims_accession_number_generation(
     ds.AccessionNumber = ''
     
     iims_scu = perf_config.integration.iims_scu_ae_title
+    iims_scp = perf_config.integration.iims_scp_ae_title
     default_local_ae = dicom_sender.endpoint.local_ae_title
+    default_remote_ae = dicom_sender.endpoint.remote_ae_title
     
     print(f"\n{'='*70}")
     print(f"BLANK ACCESSION NUMBER TEST")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
     print(f"  AccessionNumber: '' (empty string)")
-    print(f"  Called AE (SCP): {dicom_sender.endpoint.remote_ae_title}")
+    print(f"  Called AE (SCP) override: {default_remote_ae} -> {iims_scp}")
     print(f"  Calling AE (SCU) override: {default_local_ae} -> {iims_scu}")
     print(f"\n  Expecting IIMS web service to be called...")
     
-    # Override local AE (SCU) to TEAM_SCP -- this triggers IIMS routing rules
+    # Override both AE titles for the non-ordered studies route
     dicom_sender.endpoint.local_ae_title = iims_scu
+    dicom_sender.endpoint.remote_ae_title = iims_scp
     try:
         dicom_sender._send_single_dataset(ds, metrics)
     finally:
         dicom_sender.endpoint.local_ae_title = default_local_ae
+        dicom_sender.endpoint.remote_ae_title = default_remote_ae
     
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")

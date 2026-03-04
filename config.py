@@ -175,6 +175,7 @@ class IntegrationTestConfig:
     cfind_timeout: int = 60               # Poll timeout in seconds
     cfind_poll_interval: float = 5.0      # Poll interval in seconds
     iims_scu_ae_title: str = "TEAM_SCP"  # Calling AE (SCU) that triggers IIMS routing rules
+    iims_scp_ae_title: str = "LB-HTM-IM"  # Called AE (SCP) for non-ordered studies route
     iims_cfind_ae_title: str = "CLINICAL_SCP"  # Called AE for C-FIND verification against MIDIA
 
     @classmethod
@@ -187,6 +188,7 @@ class IntegrationTestConfig:
             cfind_timeout=_env_int("CFIND_TIMEOUT", 60),
             cfind_poll_interval=_env_float("CFIND_POLL_INTERVAL", 5.0),
             iims_scu_ae_title=_env_str("IIMS_SCU_AE_TITLE", "TEAM_SCP"),
+            iims_scp_ae_title=_env_str("IIMS_SCP_AE_TITLE", "LB-HTM-IM"),
             iims_cfind_ae_title=_env_str("IIMS_CFIND_AE_TITLE", "CLINICAL_SCP"),
         )
 
