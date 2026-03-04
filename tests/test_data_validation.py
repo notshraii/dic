@@ -250,19 +250,23 @@ def test_iims_accession_number_generation(
     print(f"  Status: SUCCESS")
     
     # Fail with manual verification banner -- C-FIND cannot verify this automatically
-    with manual_verification_required(
-        f"IIMS AccessionNumber generation -- verify manually on destination server. "
-        f"StudyInstanceUID: {ds.StudyInstanceUID}, "
-        f"Called AE (SCP): {iims_scp}, Calling AE (SCU): {iims_scu}"
-    ):
-        assert False, (
-            f"Automated C-FIND verification is not available for the IIMS test.\n"
-            f"Please verify MANUALLY on the destination server:\n"
-            f"  1. Look up StudyInstanceUID: {ds.StudyInstanceUID}\n"
-            f"  2. Confirm the study arrived at the non-ordered studies pool\n"
-            f"  3. Check that AccessionNumber was populated by IIMS\n"
-            f"  4. If AccessionNumber is blank, IIMS rule is not configured"
-        )
+    banner = (
+        f"\n{'!'*70}\n"
+        f"  MANUAL VERIFICATION REQUIRED\n"
+        f"{'!'*70}\n"
+        f"  IIMS AccessionNumber generation -- verify manually on destination server.\n"
+        f"\n"
+        f"  StudyInstanceUID: {ds.StudyInstanceUID}\n"
+        f"  Called AE (SCP): {iims_scp}\n"
+        f"  Calling AE (SCU): {iims_scu}\n"
+        f"\n"
+        f"  1. Look up StudyInstanceUID on the destination server\n"
+        f"  2. Confirm the study arrived at the non-ordered studies pool\n"
+        f"  3. Check that AccessionNumber was populated by IIMS\n"
+        f"  4. If AccessionNumber is blank, IIMS rule is not configured\n"
+        f"{'!'*70}"
+    )
+    pytest.fail(banner)
 
 
 @pytest.mark.integration
