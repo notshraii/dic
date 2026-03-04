@@ -70,6 +70,9 @@ All settings via `.env` file or environment variables (see `env_template.txt`). 
 | `MAX_ERROR_RATE` | `0.02` | Acceptable error rate (2%) |
 | `MAX_P95_LATENCY_MS` | `2000` | P95 latency threshold (stability) |
 | `MAX_P95_LATENCY_MS_SHORT` | `1500` | P95 latency threshold (throughput) |
+| `IIMS_SCU_AE_TITLE` | `TEAM_SCP` | IIMS test: Calling AE (SCU) for non-ordered studies route |
+| `IIMS_SCP_AE_TITLE` | `LB-HTM-IM` | IIMS test: Called AE (SCP) for non-ordered studies route |
+| `IIMS_CFIND_AE_TITLE` | `CLINICAL_SCP` | IIMS test: Called AE for C-FIND verification against MIDIA |
 
 Override at runtime: `TEST_DURATION_SECONDS=10 python3 -m pytest tests/test_load_stability.py -vv`
 

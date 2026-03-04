@@ -81,6 +81,18 @@ LOCAL_AE_TITLE=TEST_SENDER
 
 
 # ============================================================================
+# IIMS Accession Number Test (test_iims_accession_number_generation)
+# ============================================================================
+# These override the default route AE titles for the IIMS test only.
+# The test sends to the non-ordered studies route, which triggers IIMS
+# accession number generation for blank AccessionNumber.
+
+IIMS_SCU_AE_TITLE=TEAM_SCP
+IIMS_SCP_AE_TITLE=LB-HTM-IM
+IIMS_CFIND_AE_TITLE=CLINICAL_SCP
+
+
+# ============================================================================
 # Notes
 # ============================================================================
 
