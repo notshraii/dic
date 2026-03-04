@@ -249,22 +249,20 @@ def test_iims_accession_number_generation(
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
-    # Manual verification required -- C-FIND cannot verify this automatically
-    print(f"\n{'!'*70}")
-    print(f"  MANUAL VERIFICATION REQUIRED")
-    print(f"{'!'*70}")
-    print(f"  C-FIND verification is not available for this test.")
-    print(f"  Please verify MANUALLY on the destination server:")
-    print(f"")
-    print(f"  1. Look up StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  2. Confirm the study arrived at the non-ordered studies pool")
-    print(f"  3. Check that AccessionNumber was populated by IIMS")
-    print(f"  4. If AccessionNumber is blank, IIMS rule is not configured")
-    print(f"")
-    print(f"  C-STORE was sent as:")
-    print(f"    Called AE (SCP): {iims_scp}")
-    print(f"    Calling AE (SCU): {iims_scu}")
-    print(f"{'!'*70}")
+    # Fail with manual verification banner -- C-FIND cannot verify this automatically
+    with manual_verification_required(
+        f"IIMS AccessionNumber generation -- verify manually on destination server. "
+        f"StudyInstanceUID: {ds.StudyInstanceUID}, "
+        f"Called AE (SCP): {iims_scp}, Calling AE (SCU): {iims_scu}"
+    ):
+        assert False, (
+            f"Automated C-FIND verification is not available for the IIMS test.\n"
+            f"Please verify MANUALLY on the destination server:\n"
+            f"  1. Look up StudyInstanceUID: {ds.StudyInstanceUID}\n"
+            f"  2. Confirm the study arrived at the non-ordered studies pool\n"
+            f"  3. Check that AccessionNumber was populated by IIMS\n"
+            f"  4. If AccessionNumber is blank, IIMS rule is not configured"
+        )
 
 
 @pytest.mark.integration
