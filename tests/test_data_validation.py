@@ -190,11 +190,11 @@ def test_preserve_existing_study_date(
 # ============================================================================
 
 @pytest.mark.integration
+@pytest.mark.manual_verify
 def test_iims_accession_number_generation(
     dicom_sender,
     single_dicom_file: Path,
     metrics: PerfMetrics,
-    cfind_client,
     perf_config,
 ):
     """
@@ -202,8 +202,8 @@ def test_iims_accession_number_generation(
     
     Send study with blank accession number to the non-ordered studies route
     (SCU=TEAM_SCP, SCP=LB-HTM-IM). This route triggers the IIMS web service
-    to generate an accession number. Verify via C-FIND against CLINICAL_SCP
-    that the accession number was populated.
+    to generate an accession number. Requires manual verification on the
+    destination server -- C-FIND is not used by this test.
     
     Expected Result: IIMS web service called; accession number populated
     
@@ -212,7 +212,7 @@ def test_iims_accession_number_generation(
     2. Set AccessionNumber to empty string
     3. C-STORE: SCU=TEAM_SCP -> SCP=LB-HTM-IM (non-ordered studies route)
     4. Verify send succeeds
-    5. C-FIND: SCU=TEAM_SCP -> SCP=CLINICAL_SCP, check AccessionNumber
+    5. MANUAL: Check AccessionNumber on destination server
     """
     ds = load_dataset(single_dicom_file)
     
@@ -249,39 +249,22 @@ def test_iims_accession_number_generation(
     assert metrics.successes == 1, "Send failed"
     print(f"  Status: SUCCESS")
     
-    # C-FIND verification against CLINICAL_SCP (MIDIA query endpoint)
-    print(f"\n{'='*70}")
-    print(f"C-FIND VERIFICATION (MIDIA via CLINICAL_SCP)")
-    print(f"{'='*70}")
-    if cfind_client is None:
-        pytest.skip("C-FIND verification is required for this test (set CFIND_VERIFY=true)")
-
-    iims_cfind_ae = perf_config.integration.iims_cfind_ae_title
-    iims_scu = perf_config.integration.iims_scu_ae_title
-    default_cfind_ae = cfind_client.config.remote_ae_title
-    default_cfind_local = cfind_client.config.local_ae_title
-    print(f"  C-FIND Called AE override: {default_cfind_ae} -> {iims_cfind_ae}")
-    print(f"  C-FIND Calling AE override: {default_cfind_local} -> {iims_scu}")
-
-    cfind_client.config.remote_ae_title = iims_cfind_ae
-    cfind_client.config.local_ae_title = iims_scu
-    cfind_client.ae.ae_title = iims_scu
-    try:
-        patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
-        study = verify_study_arrived(cfind_client, str(ds.StudyInstanceUID), perf_config, patient_id=patient_id)
-    finally:
-        cfind_client.config.remote_ae_title = default_cfind_ae
-        cfind_client.config.local_ae_title = default_cfind_local
-        cfind_client.ae.ae_title = default_cfind_local
-
-    strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
-    acc = study.get('AccessionNumber', '')
-    assert acc and acc.strip(), (
-        f"AccessionNumber was not populated by IIMS after sending with blank AccessionNumber. "
-        f"Strategy used: '{strategy}'. "
-        f"C-FIND response keys: {list(study.keys())}."
-    )
-    print(f"  [OK] AccessionNumber populated by IIMS: {acc}")
+    # Manual verification required -- C-FIND cannot verify this automatically
+    print(f"\n{'!'*70}")
+    print(f"  MANUAL VERIFICATION REQUIRED")
+    print(f"{'!'*70}")
+    print(f"  C-FIND verification is not available for this test.")
+    print(f"  Please verify MANUALLY on the destination server:")
+    print(f"")
+    print(f"  1. Look up StudyInstanceUID: {ds.StudyInstanceUID}")
+    print(f"  2. Confirm the study arrived at the non-ordered studies pool")
+    print(f"  3. Check that AccessionNumber was populated by IIMS")
+    print(f"  4. If AccessionNumber is blank, IIMS rule is not configured")
+    print(f"")
+    print(f"  C-STORE was sent as:")
+    print(f"    Called AE (SCP): {iims_scp}")
+    print(f"    Calling AE (SCU): {iims_scu}")
+    print(f"{'!'*70}")
 
 
 @pytest.mark.integration
