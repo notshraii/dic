@@ -473,12 +473,11 @@ def test_dicom_with_attributes(single_dicom_file):
         
         # Apply custom attributes
         for attr, value in attributes.items():
-            # Support both snake_case and PascalCase
+            # Convert snake_case to PascalCase for DICOM keyword lookup
             if '_' in attr:
-                # Convert snake_case to PascalCase
                 dicom_attr = ''.join(word.capitalize() for word in attr.split('_'))
             else:
-                dicom_attr = attr
+                dicom_attr = attr[0].upper() + attr[1:] if attr else attr
             
             setattr(ds, dicom_attr, value)
         
@@ -531,11 +530,11 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    # Only process the "call" phase (the actual test), or "setup" if it failed
-    if report.when == "call" or (report.when == "setup" and report.failed):
+    # Process "call" phase, or "setup" if it failed/skipped (fixture error or skip)
+    if report.when == "call" or (report.when == "setup" and (report.failed or report.skipped)):
         if report.when == "setup" and report.failed:
             test_outcome = "error"
-        elif report.skipped:
+        elif report.skipped or (report.when == "setup" and report.skipped):
             test_outcome = "skipped"
         elif report.passed:
             test_outcome = "passed"
