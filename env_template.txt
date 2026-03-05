@@ -93,6 +93,27 @@ IIMS_CFIND_AE_TITLE=CLINICAL_SCP
 
 
 # ============================================================================
+# Azure DevOps (ADO) - Test Case Upload
+# ============================================================================
+
+# Organization URL (e.g. https://dev.azure.com/your-org)
+# ADO_ORG_URL=https://dev.azure.com/your-org
+
+# Project name
+# ADO_PROJECT=your-project
+
+# Personal Access Token (needs Work Items Read/Write scope)
+# ADO_PAT=your_pat_here
+
+# Default area path for new test cases (optional)
+# ADO_AREA_PATH=YourProject\Testing
+
+# Test Plan / Suite IDs to add cases to (optional)
+# ADO_TEST_PLAN_ID=12345
+# ADO_TEST_SUITE_ID=67890
+
+
+# ============================================================================
 # Notes
 # ============================================================================
 
