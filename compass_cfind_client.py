@@ -79,6 +79,57 @@ class CompassCFindConfig:
         )
 
 
+_REJECT_RESULT = {1: "rejected-permanent", 2: "rejected-transient"}
+_REJECT_SOURCE = {
+    1: "DICOM UL service-user",
+    2: "DICOM UL service-provider (ACSE)",
+    3: "DICOM UL service-provider (Presentation)",
+}
+_REJECT_DIAGNOSTIC_USER = {
+    1: "no-reason-given",
+    2: "application-context-name-not-supported",
+    3: "calling-AE-title-not-recognized",
+    7: "called-AE-title-not-recognized",
+}
+_REJECT_DIAGNOSTIC_ACSE = {
+    1: "no-reason-given",
+    2: "protocol-version-not-supported",
+}
+_REJECT_DIAGNOSTIC_PRES = {
+    0: "reserved",
+    1: "temporary-congestion",
+    2: "local-limit-exceeded",
+}
+
+
+def _extract_reject_diagnostic(exc: ValueError) -> str:
+    """Parse the raw diagnostic value from pynetdicom's ValueError message."""
+    import re
+    match = re.search(r"value\s*'?(\d+)'?", str(exc))
+    if match:
+        code = int(match.group(1))
+        known = (
+            _REJECT_DIAGNOSTIC_USER.get(code)
+            or _REJECT_DIAGNOSTIC_ACSE.get(code)
+            or _REJECT_DIAGNOSTIC_PRES.get(code)
+        )
+        label = known or "UNKNOWN"
+        return f"Rejection diagnostic code: {code} ({label}). "
+    return f"Could not parse diagnostic code from: {exc}. "
+
+
+def _format_assoc_rejection(assoc) -> str:
+    """Extract rejection details from a failed association."""
+    parts = []
+    for attr in ("result", "result_source", "diagnostic"):
+        val = getattr(assoc, attr, None)
+        if val is not None:
+            parts.append(f"{attr}={val}")
+    if parts:
+        return "Rejection details: " + ", ".join(parts) + ". "
+    return "No rejection details available. "
+
+
 class CompassCFindClient:
     """Client for querying Compass using DICOM C-FIND."""
     
@@ -119,22 +170,26 @@ class CompassCFindClient:
                 ae_title=self.config.remote_ae_title,
             )
         except ValueError as e:
+            # pynetdicom raises ValueError when the A-ASSOCIATE-RJ PDU
+            # contains a diagnostic code outside the DICOM standard.
+            # Try to extract the raw rejection bytes for debugging.
+            raw_diag = _extract_reject_diagnostic(e)
             raise ConnectionError(
                 f"Association rejected by {target} with non-standard diagnostic. "
                 f"Called AE: '{self.config.remote_ae_title}', "
                 f"Calling AE: '{self.config.local_ae_title}'. "
+                f"{raw_diag}"
                 f"The calling AE is likely not registered on the remote server. "
                 f"Original error: {e}"
             ) from e
         
         if not assoc.is_established:
-            reject_info = ""
-            if hasattr(assoc, 'acceptor') and hasattr(assoc.acceptor, 'info'):
-                reject_info = f" Reject info: {assoc.acceptor.info}"
+            reject_info = _format_assoc_rejection(assoc)
             raise ConnectionError(
                 f"Association rejected by {target}. "
                 f"Called AE: '{self.config.remote_ae_title}', "
-                f"Calling AE: '{self.config.local_ae_title}'.{reject_info}"
+                f"Calling AE: '{self.config.local_ae_title}'. "
+                f"{reject_info}"
             )
         
         try:
