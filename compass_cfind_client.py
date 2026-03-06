@@ -110,16 +110,31 @@ class CompassCFindClient:
         else:
             query_model = PatientRootQueryRetrieveInformationModelFind
         
-        # Associate with Compass
-        assoc = self.ae.associate(
-            self.config.host,
-            self.config.port,
-            ae_title=self.config.remote_ae_title,
-        )
+        # Associate with C-FIND server
+        target = f"{self.config.host}:{self.config.port}"
+        try:
+            assoc = self.ae.associate(
+                self.config.host,
+                self.config.port,
+                ae_title=self.config.remote_ae_title,
+            )
+        except ValueError as e:
+            raise ConnectionError(
+                f"Association rejected by {target} with non-standard diagnostic. "
+                f"Called AE: '{self.config.remote_ae_title}', "
+                f"Calling AE: '{self.config.local_ae_title}'. "
+                f"The calling AE is likely not registered on the remote server. "
+                f"Original error: {e}"
+            ) from e
         
         if not assoc.is_established:
+            reject_info = ""
+            if hasattr(assoc, 'acceptor') and hasattr(assoc.acceptor, 'info'):
+                reject_info = f" Reject info: {assoc.acceptor.info}"
             raise ConnectionError(
-                f"Failed to establish association with {self.config.host}:{self.config.port}"
+                f"Association rejected by {target}. "
+                f"Called AE: '{self.config.remote_ae_title}', "
+                f"Calling AE: '{self.config.local_ae_title}'.{reject_info}"
             )
         
         try:
