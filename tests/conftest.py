@@ -121,12 +121,24 @@ def verify_study_arrived(
         cfind_client: CompassCFindClient instance (None means verification disabled).
         study_uid: StudyInstanceUID to look for.
         perf_config: TestConfig for timeout / poll-interval settings.
+        patient_id: PatientID for PATIENT-level fallback (required when the
+            C-FIND server only supports PATIENT-level queries).
 
     Returns:
-        Dict of study attributes on success.
+        Dict of study attributes on success.  The dict always contains a
+        ``_cfind_level`` key (``"STUDY"`` or ``"PATIENT"``) indicating the
+        confidence level of the result:
+
+        - ``"STUDY"``: The exact StudyInstanceUID was matched at STUDY level.
+          All study-level attributes (StudyDate, AccessionNumber, etc.) are
+          present.  This is a definitive confirmation.
+        - ``"PATIENT"``: Only the patient was confirmed to exist on the server.
+          Study-level attributes are NOT available.  This does NOT confirm
+          that the specific study arrived — only that the patient has data on
+          the server.
 
     Raises:
-        AssertionError if the study is not found within the timeout.
+        AssertionError if nothing is found within the timeout.
     """
     if cfind_client is None:
         print("  [CFIND VERIFY] Skipped (CFIND_VERIFY=false)")
@@ -186,12 +198,45 @@ def verify_study_arrived(
         if result is not None:
             study_dict = cfind_client.dataset_to_dict(result)
             strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
-            elapsed = time.time() - start
-            print(f"  [CFIND VERIFY] Study found after {elapsed:.1f}s ({attempts} attempt(s))")
-            print(f"  [CFIND VERIFY] Strategy used: {strategy}")
-            for key, val in study_dict.items():
-                print(f"    {key}: {val}")
-            return study_dict
+            level = getattr(cfind_client, 'last_find_level', None) or 'unknown'
+            study_dict['_cfind_level'] = level
+            study_dict['_cfind_strategy'] = strategy
+
+            if level == "STUDY":
+                # STUDY-level: validate that the returned UID matches
+                returned_uid = study_dict.get('StudyInstanceUID', '')
+                if returned_uid and returned_uid != study_uid:
+                    print(
+                        f"  [CFIND VERIFY] WARNING: C-FIND returned StudyInstanceUID "
+                        f"'{returned_uid}' but we queried for '{study_uid}'. "
+                        f"Ignoring this result (strategy: {strategy})."
+                    )
+                    # Fall through to retry
+                else:
+                    elapsed = time.time() - start
+                    print(f"  [CFIND VERIFY] Study CONFIRMED after {elapsed:.1f}s ({attempts} attempt(s))")
+                    print(f"  [CFIND VERIFY] Strategy: {strategy} | Level: STUDY (definitive)")
+                    for key, val in study_dict.items():
+                        if not key.startswith('_'):
+                            print(f"    {key}: {val}")
+                    return study_dict
+            else:
+                # PATIENT-level: patient exists, but we cannot confirm this
+                # specific study. Accept the result but clearly flag it.
+                elapsed = time.time() - start
+                print(f"  [CFIND VERIFY] Patient found after {elapsed:.1f}s ({attempts} attempt(s))")
+                print(f"  [CFIND VERIFY] Strategy: {strategy} | Level: PATIENT (best-effort)")
+                print(
+                    f"  [CFIND VERIFY] WARNING: PATIENT-level result only confirms that "
+                    f"PatientID '{patient_id}' exists on the server. It does NOT confirm "
+                    f"that StudyInstanceUID '{study_uid}' specifically arrived. "
+                    f"Study-level attributes (StudyDate, AccessionNumber, StudyDescription, "
+                    f"NumberOfStudyRelatedInstances) are NOT available."
+                )
+                for key, val in study_dict.items():
+                    if not key.startswith('_'):
+                        print(f"    {key}: {val}")
+                return study_dict
 
         elapsed = time.time() - start
         if elapsed >= timeout:

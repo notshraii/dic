@@ -339,12 +339,19 @@ def test_all_available_modalities(dicom_sender, dicom_by_modality: dict, metrics
     
     print("\nResults by modality:")
     for modality, result in results.items():
+        latency_str = f"{result['avg_latency']:.2f}ms" if result['avg_latency'] is not None else "N/A"
         print(f"  {modality}: {result['successes']}/{result['count']} succeeded, "
-              f"avg latency {result['avg_latency']:.2f}ms")
+              f"avg latency {latency_str}")
     
     # Overall assertion
+    failed_modalities = {
+        mod: r for mod, r in results.items() if r['failures'] > 0
+    }
     total_successes = sum(r['successes'] for r in results.values())
     total_count = sum(r['count'] for r in results.values())
     
-    assert total_successes == total_count, "Some sends failed across modalities"
+    assert total_successes == total_count, (
+        f"Sends failed for modalities: "
+        + ", ".join(f"{mod} ({r['failures']}/{r['count']} failed)" for mod, r in failed_modalities.items())
+    )
 

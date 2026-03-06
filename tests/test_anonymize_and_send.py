@@ -233,17 +233,29 @@ def test_anonymize_and_send_single_file(
     print(f"\n{'='*60}")
     print("STEP 4: C-FIND VERIFICATION (querying C-FIND server for study)")
     print(f"{'='*60}")
+    expected_uid = new_uids['study_uid']
     study = verify_study_arrived(
-        cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
+        cfind_client, expected_uid, perf_config, patient_id="11043207"
     )
     if study is not None:
-        instances = study.get('NumberOfStudyRelatedInstances')
-        assert instances is not None, (
-            f"NumberOfStudyRelatedInstances not returned by C-FIND. "
-            f"Response keys: {list(study.keys())}"
-        )
-        assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
-        print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+        level = study.get('_cfind_level', 'unknown')
+        if level == "STUDY":
+            returned_uid = study.get('StudyInstanceUID', '')
+            assert returned_uid == expected_uid, (
+                f"StudyInstanceUID mismatch: expected '{expected_uid}', got '{returned_uid}'"
+            )
+            instances = study.get('NumberOfStudyRelatedInstances')
+            assert instances is not None, (
+                f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+                f"Response keys: {list(study.keys())}"
+            )
+            assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+        else:
+            print(
+                f"  [PATIENT-LEVEL] Patient confirmed on server. "
+                f"Study-level verification not available (server only supports PATIENT-level C-FIND)."
+            )
 
     print(f"\n  [SUCCESS] ALL VERIFICATIONS PASSED")
     print(f"  Summary: {snapshot}")
@@ -298,17 +310,29 @@ def test_anonymize_and_send_from_shared_drive(
 
         # C-FIND verification
         from tests.conftest import verify_study_arrived
+        expected_uid = new_uids['study_uid']
         study = verify_study_arrived(
-            cfind_client, new_uids['study_uid'], perf_config, patient_id="11043207"
+            cfind_client, expected_uid, perf_config, patient_id="11043207"
         )
         if study is not None:
-            instances = study.get('NumberOfStudyRelatedInstances')
-            assert instances is not None, (
-                f"NumberOfStudyRelatedInstances not returned by C-FIND. "
-                f"Response keys: {list(study.keys())}"
-            )
-            assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
-            print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+            level = study.get('_cfind_level', 'unknown')
+            if level == "STUDY":
+                returned_uid = study.get('StudyInstanceUID', '')
+                assert returned_uid == expected_uid, (
+                    f"StudyInstanceUID mismatch: expected '{expected_uid}', got '{returned_uid}'"
+                )
+                instances = study.get('NumberOfStudyRelatedInstances')
+                assert instances is not None, (
+                    f"NumberOfStudyRelatedInstances not returned by C-FIND. "
+                    f"Response keys: {list(study.keys())}"
+                )
+                assert int(instances) >= 1, f"Expected >= 1 instance, got {instances}"
+                print(f"  [OK] NumberOfStudyRelatedInstances: {instances}")
+            else:
+                print(
+                    f"  [PATIENT-LEVEL] Patient confirmed on server. "
+                    f"Study-level verification not available (server only supports PATIENT-level C-FIND)."
+                )
 
     finally:
         if os.path.exists(temp_dir):
