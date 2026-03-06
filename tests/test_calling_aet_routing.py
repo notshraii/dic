@@ -129,19 +129,12 @@ def test_called_aet_routing(
         patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
         study = verify_study_arrived(cfind_client, test_study_uid, perf_config, patient_id=patient_id)
         if study is not None:
-            level = study.get('_cfind_level', 'unknown')
-            if level == "STUDY":
-                returned_uid = study.get('StudyInstanceUID', '')
-                assert returned_uid == test_study_uid, (
-                    f"StudyInstanceUID mismatch: expected '{test_study_uid}', "
-                    f"got '{returned_uid}'"
-                )
-                print(f"  [OK] Study CONFIRMED in Compass for called AET: {called_aet}")
-            else:
-                print(
-                    f"  [PATIENT-LEVEL] Patient exists on server for called AET: {called_aet}. "
-                    f"Study-level confirmation not available (server only supports PATIENT-level C-FIND)."
-                )
+            returned_uid = study.get('StudyInstanceUID', '')
+            assert returned_uid == test_study_uid, (
+                f"StudyInstanceUID mismatch: expected '{test_study_uid}', "
+                f"got '{returned_uid}'"
+            )
+            print(f"  [OK] Study CONFIRMED in Compass for called AET: {called_aet}")
 
     finally:
         # Restore original AE title
@@ -288,14 +281,12 @@ def test_multiple_aets_batch_send(
                 expected_uid = str(r['study_uid'])
                 study = verify_study_arrived(cfind_client, expected_uid, perf_config, patient_id=r.get('patient_id'))
                 if study is not None:
-                    level = study.get('_cfind_level', 'unknown')
-                    if level == "STUDY":
-                        returned_uid = study.get('StudyInstanceUID', '')
-                        assert returned_uid == expected_uid, (
-                            f"StudyInstanceUID mismatch for AET {r['called_aet']}: "
-                            f"expected '{expected_uid}', got '{returned_uid}'"
-                        )
-                    print(f"  [OK] Verified AET {r['called_aet']} (level: {level})")
+                    returned_uid = study.get('StudyInstanceUID', '')
+                    assert returned_uid == expected_uid, (
+                        f"StudyInstanceUID mismatch for AET {r['called_aet']}: "
+                        f"expected '{expected_uid}', got '{returned_uid}'"
+                    )
+                    print(f"  [OK] Verified AET {r['called_aet']}")
 
     finally:
         dicom_sender.endpoint.remote_ae_title = original_aet
@@ -443,14 +434,12 @@ def test_called_aet_with_modality_combinations(
                 expected_uid = str(r['study_uid'])
                 study = verify_study_arrived(cfind_client, expected_uid, perf_config, patient_id=r.get('patient_id'))
                 if study is not None:
-                    level = study.get('_cfind_level', 'unknown')
-                    if level == "STUDY":
-                        returned_uid = study.get('StudyInstanceUID', '')
-                        assert returned_uid == expected_uid, (
-                            f"StudyInstanceUID mismatch for {r['aet']} + {modality}: "
-                            f"expected '{expected_uid}', got '{returned_uid}'"
-                        )
-                    print(f"  [OK] Verified {r['aet']} + {modality} (level: {level})")
+                    returned_uid = study.get('StudyInstanceUID', '')
+                    assert returned_uid == expected_uid, (
+                        f"StudyInstanceUID mismatch for {r['aet']} + {modality}: "
+                        f"expected '{expected_uid}', got '{returned_uid}'"
+                    )
+                    print(f"  [OK] Verified {r['aet']} + {modality}")
 
     finally:
         dicom_sender.endpoint.remote_ae_title = original_aet

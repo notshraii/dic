@@ -238,26 +238,8 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
 
     study_data = verify_study_arrived(cfind_client, study_uid, perf_config, patient_id=patient_id)
     strategy = getattr(cfind_client, 'last_find_strategy', None) or 'unknown'
-    level = study_data.get('_cfind_level', 'unknown')
-
-    if level == "PATIENT":
-        with manual_verification_required(
-            f"Transformation verification -- PATIENT-level C-FIND only. "
-            f"The server does not support STUDY-level queries so transformation "
-            f"attributes cannot be verified automatically. "
-            f"Verify manually on Compass server for StudyInstanceUID: {study_uid}. "
-            f"Expected: {expected_attributes}"
-        ):
-            assert False, (
-                f"Cannot verify transformations: C-FIND server only supports "
-                f"PATIENT-level queries (strategy: {strategy}). "
-                f"Study-level attributes (StudyDescription, etc.) are not returned. "
-                f"Expected transformations: {expected_attributes}. "
-                f"Open Compass admin UI and verify for StudyInstanceUID: {study_uid}"
-            )
 
     # STUDY-level: verify each expected attribute
-    print(f"\n  Verifying expected transformations (level: {level}):")
 
     for attr_name, expected_value in expected_attributes.items():
         # Convert snake_case to PascalCase DICOM attribute name

@@ -221,22 +221,28 @@ def verify_study_arrived(
                             print(f"    {key}: {val}")
                     return study_dict
             else:
-                # PATIENT-level: patient exists, but we cannot confirm this
-                # specific study. Accept the result but clearly flag it.
+                # PATIENT-level result: the patient exists on the server but
+                # the specific study was NOT found at STUDY level.
+                # At MIDIA this is the QA-queue signature — the study arrived
+                # but is hidden because the order is invalid or not yet placed.
+                # Treat this as a definitive failure rather than a soft pass.
                 elapsed = time.time() - start
-                print(f"  [CFIND VERIFY] Patient found after {elapsed:.1f}s ({attempts} attempt(s))")
-                print(f"  [CFIND VERIFY] Strategy: {strategy} | Level: PATIENT (best-effort)")
+                print(f"  [CFIND VERIFY] PATIENT-level result after {elapsed:.1f}s ({attempts} attempt(s))")
+                print(f"  [CFIND VERIFY] Strategy: {strategy} | Level: PATIENT")
                 print(
-                    f"  [CFIND VERIFY] WARNING: PATIENT-level result only confirms that "
-                    f"PatientID '{patient_id}' exists on the server. It does NOT confirm "
-                    f"that StudyInstanceUID '{study_uid}' specifically arrived. "
-                    f"Study-level attributes (StudyDate, AccessionNumber, StudyDescription, "
-                    f"NumberOfStudyRelatedInstances) are NOT available."
+                    f"  [CFIND VERIFY] PatientID '{patient_id}' exists on the server, "
+                    f"but StudyInstanceUID '{study_uid}' was NOT found at STUDY level."
                 )
                 for key, val in study_dict.items():
                     if not key.startswith('_'):
                         print(f"    {key}: {val}")
-                return study_dict
+                raise AssertionError(
+                    f"C-FIND verification failed: study '{study_uid}' not confirmed at STUDY level. "
+                    f"The patient (PatientID='{patient_id}') exists on the server, but the study "
+                    f"is not visible via STUDY-level C-FIND. At MIDIA this typically means the "
+                    f"study is in the QA queue because the order is invalid or not yet placed. "
+                    f"Verify the order exists in the RIS/ordering system before routing."
+                )
 
         elapsed = time.time() - start
         if elapsed >= timeout:
