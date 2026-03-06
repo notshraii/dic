@@ -68,16 +68,26 @@ COMPASS_AE_TITLE=COMPASS
 LOCAL_AE_TITLE=TEST_SENDER
 
 # ============================================================================
-# C-FIND / Query Server (optional - if different from Compass)
+# C-FIND / Query Server — REQUIRED for integration tests (queries MIDIA)
 # ============================================================================
-# Set these when C-FIND runs on a different host (e.g. IM/Query server).
-# If unset, compass_cfind_client.py uses COMPASS_HOST/PORT/AE_TITLE above.
+# Integration tests verify studies arrived at MIDIA, not just at Compass.
+# Without these, C-FIND falls back to COMPASS_HOST (the Compass router),
+# which produces false positives — Compass can answer the query even when
+# MIDIA never received or rejected the study.
+#
+# If a study is in MIDIA's QA queue (invalid/unordered study) it will be
+# visible to Compass but NOT returned by MIDIA at STUDY level. The tests
+# will fail with:
+#   "study not confirmed at STUDY level ... may be in QA queue because
+#    the order is invalid or not yet placed"
+# This is the correct and expected behaviour.
 
-# CFIND_HOST=im.example.org
-# CFIND_PORT=104
-# CFIND_AE_TITLE=IM_SCP
-# C-FIND uses the active route's local AE (LOCAL_AE_HTM_* per COMPASS_ROUTE). Override only if needed:
-# CFIND_LOCAL_AE_TITLE=QUERY_SCU
+CFIND_HOST=<midia host or ip>
+CFIND_PORT=<midia port, typically 104 or 11112>
+CFIND_AE_TITLE=<called AE title on MIDIA, e.g. CLINICAL_SCP>
+# C-FIND calling AE: defaults to the active route's LOCAL_AE_HTM_* value.
+# Override only if MIDIA requires a different calling AE for query access:
+# CFIND_LOCAL_AE_TITLE=<calling AE authorized by MIDIA for C-FIND queries>
 
 
 # ============================================================================
