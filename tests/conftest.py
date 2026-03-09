@@ -84,6 +84,7 @@ def dicom_sender(perf_config: TestConfig) -> DicomSender:
     return DicomSender(
         endpoint=perf_config.endpoint,
         load_profile=perf_config.load_profile,
+        accession_number=perf_config.dataset.accession_number,
     )
 
 

@@ -241,7 +241,7 @@ def test_iims_accession_number_generation(
     dicom_sender.endpoint.local_ae_title = iims_scu
     dicom_sender.endpoint.remote_ae_title = iims_scp
     try:
-        dicom_sender._send_single_dataset(ds, metrics)
+        dicom_sender._send_single_dataset(ds, metrics, stamp_accession=False)
     finally:
         dicom_sender.endpoint.local_ae_title = default_local_ae
         dicom_sender.endpoint.remote_ae_title = default_remote_ae
@@ -281,13 +281,14 @@ def test_pass_device_accession_number(
     """
     COMPASS_DataValidation_PassDeviceAccessionNumber
     
-    Send study with valid accession number.
+    Send study with a known accession number (from ACCESSION_NUMBER env var
+    when configured, or a test-local value otherwise).
     Verify images are routed with the specified accession number.
     
     Expected Result: Images routed with specified accession number
     
     Test Steps:
-    1. Set specific AccessionNumber
+    1. Set AccessionNumber (env override takes effect in the sender)
     2. Send to Compass
     3. Verify accession number is preserved
     """
@@ -297,15 +298,16 @@ def test_pass_device_accession_number(
     ds.SeriesInstanceUID = generate_uid()
     ds.SOPInstanceUID = generate_uid()
     
-    # Set specific accession number
-    test_accession = "TEST-ACC-12345678"
-    ds.AccessionNumber = test_accession
+    # The sender stamps ACCESSION_NUMBER from env if configured.
+    # Use that value for verification; fall back to a test-local value.
+    expected_accession = dicom_sender.accession_number or "TEST-ACC-12345678"
+    ds.AccessionNumber = expected_accession
     
     print(f"\n{'='*70}")
     print(f"PASS DEVICE ACCESSION NUMBER TEST")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID: {ds.StudyInstanceUID}")
-    print(f"  AccessionNumber: {test_accession}")
+    print(f"  AccessionNumber: {expected_accession}")
     
     dicom_sender._send_single_dataset(ds, metrics)
     
@@ -325,12 +327,12 @@ def test_pass_device_accession_number(
     with manual_verification_required("AccessionNumber preservation -- verified manually on server"):
         assert acc and acc.strip(), (
             f"AccessionNumber not returned by C-FIND for study {ds.StudyInstanceUID}. "
-            f"Expected '{test_accession}' but got empty/missing value. "
+            f"Expected '{expected_accession}' but got empty/missing value. "
             f"Strategy used: '{strategy}'. "
             f"C-FIND response keys: {list(study.keys())}."
         )
-        assert acc.strip() == test_accession, (
-            f"AccessionNumber was not preserved: expected '{test_accession}', "
+        assert acc.strip() == expected_accession, (
+            f"AccessionNumber was not preserved: expected '{expected_accession}', "
             f"got '{acc.strip()}'"
         )
     print(f"  [OK] AccessionNumber preserved: {acc}")

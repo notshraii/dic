@@ -29,9 +29,11 @@ class DicomSender:
         self,
         endpoint: DicomEndpointConfig,
         load_profile: LoadProfileConfig,
+        accession_number: Optional[str] = None,
     ) -> None:
         self.endpoint = endpoint
         self.load_profile = load_profile
+        self.accession_number = accession_number
 
     def _build_ae(self) -> AE:
         ae = AE(ae_title=self.endpoint.local_ae_title.encode("ascii", "ignore"))
@@ -47,13 +49,23 @@ class DicomSender:
         self,
         ds,
         metrics: PerfMetrics,
+        stamp_accession: bool = True,
     ) -> None:
-        """Send single dataset using fresh association."""
+        """Send single dataset using fresh association.
+
+        Args:
+            ds: pydicom Dataset to send.
+            metrics: PerfMetrics collector.
+            stamp_accession: When True (default) and self.accession_number is
+                configured, overwrite ds.AccessionNumber before sending.
+                Pass False to skip (used by the IIMS blank-accession test).
+        """
+        if stamp_accession and self.accession_number:
+            ds.AccessionNumber = self.accession_number
+
         start = time.perf_counter()
         ae = self._build_ae()
         try:
-            # Ensure encoding consistency before sending
-            # This prevents "dataset is encoded as X but file_meta has Y" errors
             from data_loader import ensure_encoding_consistency
             ds = ensure_encoding_consistency(ds)
             
