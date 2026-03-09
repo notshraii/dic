@@ -132,18 +132,13 @@ class DatasetConfig:
     """
     dicom_root_dir: Path
     recursive: bool = True
-    accession_number: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> "DatasetConfig":
         dicom_root = _env_str("DICOM_ROOT_DIR", "./dicom_samples")
-        acc = _env_str("ACCESSION_NUMBER", None)
-        if acc is not None and acc.strip() == "":
-            acc = None
         return cls(
             dicom_root_dir=Path(dicom_root).resolve(),
             recursive=True,
-            accession_number=acc,
         )
 
 

@@ -101,15 +101,6 @@ IIMS_SCU_AE_TITLE=TEAM_SCP
 IIMS_SCP_AE_TITLE=LB-HTM-IM
 IIMS_CFIND_AE_TITLE=CLINICAL_SCP
 
-# ============================================================================
-# Accession Number Override
-# ============================================================================
-# When set, this AccessionNumber is stamped on every outgoing study before
-# C-STORE (except for test_iims_accession_number_generation, which explicitly
-# sends with a blank AccessionNumber to trigger IIMS generation).
-# Leave empty or comment out to skip the override.
-ACCESSION_NUMBER=
-
 
 # ============================================================================
 # Azure DevOps (ADO) - Test Case Upload
