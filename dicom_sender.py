@@ -21,6 +21,8 @@ from metrics import PerfMetrics, Sample
 
 logger = logging.getLogger(__name__)
 
+sent_study_uids: list = []
+
 
 class DicomSender:
     """High-level C-STORE sender with simple concurrency support."""
@@ -77,6 +79,10 @@ class DicomSender:
 
             end = time.perf_counter()
             success = status and status.Status in (0x0000,)
+            if success:
+                uid = str(ds.StudyInstanceUID) if hasattr(ds, 'StudyInstanceUID') else None
+                if uid:
+                    sent_study_uids.append(uid)
             metrics.record(
                 Sample(
                     start_time=start,

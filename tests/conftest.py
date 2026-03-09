@@ -26,7 +26,7 @@ if str(project_root) not in sys.path:
 from config import TestConfig
 from compass_cfind_client import CompassCFindClient, CompassCFindConfig
 from data_loader import find_dicom_files, load_dataset
-from dicom_sender import DicomSender
+from dicom_sender import DicomSender, sent_study_uids
 from metrics import PerfMetrics
 from report import ReportData, TestResult, generate_html_report
 
@@ -44,6 +44,11 @@ else:
 _report_test_results: List[TestResult] = []
 _report_session_start: float = 0.0
 _report_config: Optional[TestConfig] = None
+
+# ---------------------------------------------------------------------------
+# StudyInstanceUID tracking (written to study_uids.txt at session end)
+# ---------------------------------------------------------------------------
+_uid_log: List[tuple] = []  # [(node_id, [uids])]
 
 
 @pytest.fixture(scope="session")
@@ -76,6 +81,16 @@ def metrics(request) -> PerfMetrics:
     m = PerfMetrics()
     request.node._perf_metrics = m
     return m
+
+
+@pytest.fixture(autouse=True)
+def _track_study_uids(request):
+    """Record which StudyInstanceUIDs were sent during each test."""
+    start_idx = len(sent_study_uids)
+    yield
+    new_uids = list(sent_study_uids[start_idx:])
+    if new_uids:
+        _uid_log.append((request.node.nodeid, new_uids))
 
 
 @pytest.fixture(scope="session")
@@ -569,10 +584,12 @@ def test_dicom_with_attributes(single_dicom_file):
 # ============================================================================
 
 def pytest_sessionstart(session):
-    """Record session start time for report duration calculation."""
+    """Record session start time and reset UID tracking."""
     global _report_session_start, _report_test_results
     _report_session_start = time.time()
     _report_test_results = []
+    sent_study_uids.clear()
+    _uid_log.clear()
 
 
 @pytest.hookimpl(hookwrapper=True)
@@ -689,3 +706,20 @@ def pytest_sessionfinish(session, exitstatus):
     tw.sep("=", "Test Execution Report")
     tw.line(f" {file_url}")
     tw.sep("=")
+
+    # Write study_uids.txt (overwritten each session)
+    if _uid_log:
+        uid_path = project_root / "study_uids.txt"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        lines = [f"Test Session: {timestamp}", ""]
+        for node_id, uids in _uid_log:
+            short_name = node_id.split("::")[-1] if "::" in node_id else node_id
+            for uid in uids:
+                lines.append(f"{short_name}  {uid}")
+        lines.append("")
+        uid_path.write_text("\n".join(lines), encoding="utf-8")
+        tw.line()
+        tw.sep("=", "Study UIDs")
+        tw.line(f" {uid_path}")
+        tw.line(f" {len(sent_study_uids)} StudyInstanceUID(s) from {len(_uid_log)} test(s)")
+        tw.sep("=")
