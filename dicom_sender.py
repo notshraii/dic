@@ -48,13 +48,7 @@ class DicomSender:
         ds,
         metrics: PerfMetrics,
     ) -> None:
-        """Send single dataset using fresh association.
-
-        AccessionNumber is always blanked before sending so that the IIMS
-        web service generates one for every study.
-        """
-        ds.AccessionNumber = ''
-
+        """Send single dataset using fresh association."""
         start = time.perf_counter()
         ae = self._build_ae()
         try:
