@@ -273,6 +273,105 @@ def query_and_verify(cfind_client, perf_config, study_uid: str, expected_attribu
 
 
 # ============================================================================
+# Test: PatientID / OtherPatientIDs Swap (CSN vs MRN coercion)
+# ============================================================================
+
+@pytest.mark.integration
+def test_patient_id_coerced_from_other_patient_ids(
+    single_dicom_file,
+    dicom_sender,
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
+):
+    """
+    COMPASS_Transformation_PatientID_Coercion
+
+    Send a study with the PatientID and OtherPatientIDs elements swapped:
+    PatientID (0010,0020) = CSN, OtherPatientIDs (0010,1000) = MRN.
+
+    Compass is expected to coerce the value in OtherPatientIDs (0010,1000)
+    into PatientID (0010,0020), so the study should arrive with PatientID
+    equal to the MRN that was placed in OtherPatientIDs.
+
+    Test Steps:
+    1. Load a DICOM file
+    2. Set PatientID (0010,0020) = CSN value
+    3. Set OtherPatientIDs (0010,1000) = MRN value
+    4. Send to Compass
+    5. C-FIND verification: PatientID should now contain the MRN value
+    """
+    from pydicom.uid import generate_uid
+
+    ds = load_dataset(single_dicom_file)
+
+    study_uid = generate_uid()
+    ds.StudyInstanceUID = study_uid
+    ds.SeriesInstanceUID = generate_uid()
+    ds.SOPInstanceUID = generate_uid()
+
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    csn_value = f"CSN{timestamp}"
+    mrn_value = f"MRN{timestamp}"
+
+    # Swap: put CSN where MRN normally goes, and vice versa
+    ds.PatientID = csn_value                # (0010,0020) -- normally MRN
+    ds.OtherPatientIDs = mrn_value           # (0010,1000) -- normally CSN
+
+    print(f"\n{'='*70}")
+    print(f"PATIENT ID COERCION TEST (OtherPatientIDs -> PatientID)")
+    print(f"{'='*70}")
+    print(f"  StudyInstanceUID     : {study_uid}")
+    print(f"  PatientID  (0010,0020) sent as : {csn_value}  (CSN)")
+    print(f"  OtherPatientIDs (0010,1000) sent as : {mrn_value}  (MRN)")
+    print(f"  Expected PatientID after Compass    : {mrn_value}  (coerced from 0010,1000)")
+
+    # Send to Compass
+    print(f"\n[STEP 1: SENDING TO COMPASS]")
+    dicom_sender._send_single_dataset(ds, metrics)
+
+    assert metrics.successes == 1, (
+        f"Send failed: {metrics.failures} failure(s), "
+        f"error rate: {metrics.error_rate:.1%}"
+    )
+    print(f"  Status : SUCCESS")
+    print(f"  Latency: {metrics.avg_latency_ms:.2f}ms")
+
+    # C-FIND verification
+    print(f"\n[STEP 2: C-FIND VERIFICATION]")
+
+    if cfind_client is None:
+        pytest.skip(
+            "C-FIND verification is required for this test (set CFIND_VERIFY=true)"
+        )
+
+    cfind_study = verify_study_arrived(
+        cfind_client, str(study_uid), perf_config, patient_id=mrn_value,
+    )
+
+    actual_patient_id = cfind_study.get('PatientID', '') if cfind_study else ''
+
+    print(f"\n  [COERCION CHECK]")
+    print(f"    Sent PatientID (0010,0020)       : {csn_value} (CSN)")
+    print(f"    Sent OtherPatientIDs (0010,1000)  : {mrn_value} (MRN)")
+    print(f"    Received PatientID via C-FIND     : {actual_patient_id}")
+
+    with manual_verification_required(
+        f"PatientID coercion -- verify on Compass that PatientID "
+        f"for study {study_uid} equals '{mrn_value}' (coerced from "
+        f"OtherPatientIDs). Sent PatientID was '{csn_value}'."
+    ):
+        assert actual_patient_id == mrn_value, (
+            f"PatientID coercion failed: expected '{mrn_value}' "
+            f"(from OtherPatientIDs) but C-FIND returned '{actual_patient_id}'. "
+            f"Original PatientID sent was '{csn_value}'."
+        )
+
+    print(f"    Result: PatientID correctly coerced from OtherPatientIDs")
+    print(f"\n[DONE] PatientID coercion test complete")
+
+
+# ============================================================================
 # Summary Test - Run All Transformation Tests
 # ============================================================================
 
