@@ -402,6 +402,172 @@ def test_send_with_variable_delays(
 
 
 # ============================================================================
+# Test 4: Interrupted Transmission / Partial Send Recovery
+# ============================================================================
+
+@pytest.mark.integration
+@pytest.mark.slow
+def test_interrupted_send_then_resend_complete_study(
+    dicom_sender,
+    small_dicom_files: List[Path],
+    metrics: PerfMetrics,
+    cfind_client,
+    perf_config,
+):
+    """
+    COMPASS_FailureMode_InterruptedTransmission
+
+    Send partial study (3 files), simulate interruption, wait 1 minute,
+    then resend the complete study (10 files). Verify that Compass contains
+    exactly the expected number of instances with no orphan duplicates from
+    the aborted partial send.
+
+    Expected Result:
+    - All resent files are accepted
+    - Study completeness = 10 instances (no duplicates from the orphan 3)
+    - Study is fully routed to downstream systems
+
+    Test Steps:
+    1. Select 10 DICOM files and assign a shared StudyInstanceUID
+    2. Send first 3 files (partial / interrupted transmission)
+    3. Wait 60 seconds (simulate network outage / interruption gap)
+    4. Resend all 10 files with new SOP Instance UIDs but same Study UID
+    5. C-FIND verification: confirm study arrived
+    6. Assert NumberOfStudyRelatedInstances == 10 (no orphan duplicates)
+    """
+    interrupt_after = 3
+    total_files = 10
+    interruption_wait = 60  # seconds
+
+    if len(small_dicom_files) < total_files:
+        pytest.skip(
+            f"Need at least {total_files} small DICOM files, "
+            f"only {len(small_dicom_files)} available"
+        )
+
+    test_files = small_dicom_files[:total_files]
+
+    study_uid = generate_uid()
+    series_uid = generate_uid()
+
+    print(f"\n{'='*70}")
+    print(f"INTERRUPTED TRANSMISSION TEST")
+    print(f"{'='*70}")
+    print(f"  StudyInstanceUID : {study_uid}")
+    print(f"  Total files      : {total_files}")
+    print(f"  Interrupt after  : {interrupt_after} files")
+    print(f"  Wait before retry: {interruption_wait}s")
+
+    # ------------------------------------------------------------------
+    # Phase 1: Partial send (simulate interrupted transmission)
+    # ------------------------------------------------------------------
+    print(f"\n--- PHASE 1: Partial send ({interrupt_after} files) ---")
+    partial_metrics = PerfMetrics()
+    partial_sop_uids = []
+
+    for i, file in enumerate(test_files[:interrupt_after], 1):
+        ds = load_dataset(file)
+        ds.StudyInstanceUID = study_uid
+        ds.SeriesInstanceUID = series_uid
+        sop_uid = generate_uid()
+        ds.SOPInstanceUID = sop_uid
+        partial_sop_uids.append(sop_uid)
+
+        print(f"  [{i}/{interrupt_after}] Sending {file.name}  (SOP: ...{str(sop_uid)[-12:]})")
+        dicom_sender._send_single_dataset(ds, partial_metrics)
+
+    print(f"\n  Partial send results: {partial_metrics.successes}/{interrupt_after} succeeded")
+    assert partial_metrics.successes == interrupt_after, (
+        f"Partial send failed: expected {interrupt_after} successes, "
+        f"got {partial_metrics.successes}"
+    )
+
+    # ------------------------------------------------------------------
+    # Interruption gap
+    # ------------------------------------------------------------------
+    print(f"\n--- INTERRUPTION: waiting {interruption_wait}s ---")
+    time.sleep(interruption_wait)
+
+    # ------------------------------------------------------------------
+    # Phase 2: Resend complete study (all 10 files, fresh SOP UIDs)
+    # ------------------------------------------------------------------
+    print(f"\n--- PHASE 2: Full resend ({total_files} files) ---")
+    resend_metrics = PerfMetrics()
+    resend_sop_uids = []
+
+    for i, file in enumerate(test_files, 1):
+        ds = load_dataset(file)
+        ds.StudyInstanceUID = study_uid
+        ds.SeriesInstanceUID = series_uid
+        sop_uid = generate_uid()
+        ds.SOPInstanceUID = sop_uid
+        resend_sop_uids.append(sop_uid)
+
+        print(f"  [{i}/{total_files}] Sending {file.name}  (SOP: ...{str(sop_uid)[-12:]})")
+        dicom_sender._send_single_dataset(ds, resend_metrics)
+
+    print(f"\n  Full resend results: {resend_metrics.successes}/{total_files} succeeded")
+    assert resend_metrics.successes == total_files, (
+        f"Full resend failed: expected {total_files} successes, "
+        f"got {resend_metrics.successes}"
+    )
+
+    # Aggregate into the test-level metrics fixture for reporting
+    for sample in partial_metrics.samples:
+        metrics.record(sample)
+    for sample in resend_metrics.samples:
+        metrics.record(sample)
+
+    # ------------------------------------------------------------------
+    # Phase 3: C-FIND verification
+    # ------------------------------------------------------------------
+    print(f"\n--- PHASE 3: C-FIND verification ---")
+
+    ds_last = load_dataset(test_files[0])
+    ds_last.StudyInstanceUID = study_uid
+    patient_id = str(ds_last.PatientID) if hasattr(ds_last, 'PatientID') else None
+
+    cfind_study = verify_study_arrived(
+        cfind_client, str(study_uid), perf_config, patient_id=patient_id,
+    )
+
+    if cfind_study is None:
+        print("  [CFIND VERIFY] Skipped (verification disabled)")
+    else:
+        instances_str = cfind_study.get('NumberOfStudyRelatedInstances')
+        if instances_str is not None:
+            instance_count = int(instances_str)
+            print(f"  NumberOfStudyRelatedInstances: {instance_count}")
+
+            orphan_duplicate_count = instance_count - total_files
+            if orphan_duplicate_count > 0:
+                print(
+                    f"  DUPLICATE DETECTED: expected {total_files} instances "
+                    f"but found {instance_count} ({orphan_duplicate_count} orphan duplicates)"
+                )
+            assert instance_count == total_files, (
+                f"Study completeness check failed: expected {total_files} instances, "
+                f"found {instance_count}. Orphan files from the interrupted partial "
+                f"send were not de-duplicated by Compass."
+            )
+            print(f"  [OK] No orphan duplicates -- study has exactly {total_files} instances")
+        else:
+            print(
+                "  [WARNING] NumberOfStudyRelatedInstances not returned by C-FIND. "
+                "Cannot verify orphan de-duplication automatically."
+            )
+
+    print(f"\n{'='*70}")
+    print(f"RESULTS SUMMARY")
+    print(f"{'='*70}")
+    print(f"  Phase 1 (partial) : {partial_metrics.successes}/{interrupt_after} sent")
+    print(f"  Phase 2 (resend)  : {resend_metrics.successes}/{total_files} sent")
+    print(f"  Total sends       : {metrics.total}")
+    print(f"  Overall error rate: {metrics.error_rate:.1%}")
+    print(f"[DONE] Interrupted transmission test complete")
+
+
+# ============================================================================
 # Helper: Quick Connectivity Check
 # ============================================================================
 
