@@ -429,11 +429,13 @@ def test_interrupted_send_then_resend_complete_study(
 
     Test Steps:
     1. Select 10 DICOM files and assign a shared StudyInstanceUID
-    2. Send first 3 files (partial / interrupted transmission)
-    3. Wait 60 seconds (simulate network outage / interruption gap)
-    4. Resend all 10 files with new SOP Instance UIDs but same Study UID
-    5. C-FIND verification: confirm study arrived
-    6. Assert NumberOfStudyRelatedInstances == 10 (no orphan duplicates)
+    2. Pre-generate SOP Instance UIDs for all 10 files
+    3. Send first 3 files (partial / interrupted transmission)
+    4. Wait 60 seconds (simulate network outage / interruption gap)
+    5. Resend all 10 files with the SAME SOP Instance UIDs (files 1-3
+       are duplicates of the orphans; files 4-10 are new)
+    6. C-FIND verification: confirm study arrived
+    7. Assert NumberOfStudyRelatedInstances == 10 (orphans de-duplicated)
     """
     interrupt_after = 3
     total_files = 10
@@ -459,21 +461,25 @@ def test_interrupted_send_then_resend_complete_study(
     print(f"  Wait before retry: {interruption_wait}s")
 
     # ------------------------------------------------------------------
+    # Pre-generate SOP UIDs for all 10 files so the resend in Phase 2
+    # reuses the same UIDs for files 1-3, allowing Compass to
+    # de-duplicate the orphans from the interrupted partial send.
+    # ------------------------------------------------------------------
+    all_sop_uids = [generate_uid() for _ in range(total_files)]
+
+    # ------------------------------------------------------------------
     # Phase 1: Partial send (simulate interrupted transmission)
     # ------------------------------------------------------------------
     print(f"\n--- PHASE 1: Partial send ({interrupt_after} files) ---")
     partial_metrics = PerfMetrics()
-    partial_sop_uids = []
 
     for i, file in enumerate(test_files[:interrupt_after], 1):
         ds = load_dataset(file)
         ds.StudyInstanceUID = study_uid
         ds.SeriesInstanceUID = series_uid
-        sop_uid = generate_uid()
-        ds.SOPInstanceUID = sop_uid
-        partial_sop_uids.append(sop_uid)
+        ds.SOPInstanceUID = all_sop_uids[i - 1]
 
-        print(f"  [{i}/{interrupt_after}] Sending {file.name}  (SOP: ...{str(sop_uid)[-12:]})")
+        print(f"  [{i}/{interrupt_after}] Sending {file.name}  (SOP: ...{str(all_sop_uids[i-1])[-12:]})")
         dicom_sender._send_single_dataset(ds, partial_metrics)
 
     print(f"\n  Partial send results: {partial_metrics.successes}/{interrupt_after} succeeded")
@@ -489,21 +495,20 @@ def test_interrupted_send_then_resend_complete_study(
     time.sleep(interruption_wait)
 
     # ------------------------------------------------------------------
-    # Phase 2: Resend complete study (all 10 files, fresh SOP UIDs)
+    # Phase 2: Resend complete study (all 10 files, same SOP UIDs)
+    # Files 1-3 reuse the UIDs already sent in Phase 1 so Compass
+    # can recognise them as duplicates rather than new instances.
     # ------------------------------------------------------------------
     print(f"\n--- PHASE 2: Full resend ({total_files} files) ---")
     resend_metrics = PerfMetrics()
-    resend_sop_uids = []
 
     for i, file in enumerate(test_files, 1):
         ds = load_dataset(file)
         ds.StudyInstanceUID = study_uid
         ds.SeriesInstanceUID = series_uid
-        sop_uid = generate_uid()
-        ds.SOPInstanceUID = sop_uid
-        resend_sop_uids.append(sop_uid)
+        ds.SOPInstanceUID = all_sop_uids[i - 1]
 
-        print(f"  [{i}/{total_files}] Sending {file.name}  (SOP: ...{str(sop_uid)[-12:]})")
+        print(f"  [{i}/{total_files}] Sending {file.name}  (SOP: ...{str(all_sop_uids[i-1])[-12:]})")
         dicom_sender._send_single_dataset(ds, resend_metrics)
 
     print(f"\n  Full resend results: {resend_metrics.successes}/{total_files} succeeded")
