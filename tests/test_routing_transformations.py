@@ -343,11 +343,11 @@ def test_patient_id_coerced_from_other_patient_ids(
     ds.AccessionNumber = ''
 
     if not use_ac_prefix:
-        # No AC: keep original PatientID from the file (like IIMS test) so the
-        # study routes. Only set OtherPatientIDs to confirm the tag is present.
+        # No AC: keep everything from the original file (like IIMS test) so the
+        # study routes. Do NOT set OtherPatientIDs -- that may trigger Compass
+        # filters that prevent routing.
         patient_id_value = original_patient_id
         mrn_value = original_patient_id
-        ds.OtherPatientIDs = mrn_value         # (0010,1000)
     else:
         patient_id_value = ac_csn_value
         ds.PatientID = patient_id_value        # (0010,0020)
