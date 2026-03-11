@@ -326,6 +326,9 @@ def test_patient_id_coerced_from_other_patient_ids(
     # (like IIMS test). When AC is present, Compass may not route without a real CSN.
     use_ac_prefix = os.getenv("TEST_USE_AC_PREFIX", "1").strip().lower() not in ("0", "false", "no", "")
 
+    # Keep the original PatientID from the file for reference / fallback
+    original_patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
+
     if use_real_ids:
         # CSN may be provided with or without "AC" prefix
         csn_part = env_csn if not env_csn.upper().startswith("AC") else env_csn[2:].lstrip()
@@ -336,14 +339,16 @@ def test_patient_id_coerced_from_other_patient_ids(
         ac_csn_value = f"AC{timestamp}"
         mrn_value = f"MRN{timestamp}"
 
-    # If not using AC prefix, put MRN in PatientID so study routes (Swap filter won't run)
     if not use_ac_prefix:
-        patient_id_value = mrn_value
+        # No AC: keep original PatientID from the file (like IIMS test) so the
+        # study routes. Only set OtherPatientIDs to confirm the tag is present.
+        patient_id_value = original_patient_id
+        mrn_value = original_patient_id
+        ds.OtherPatientIDs = mrn_value         # (0010,1000)
     else:
         patient_id_value = ac_csn_value
-
-    ds.PatientID = patient_id_value             # (0010,0020)
-    ds.OtherPatientIDs = mrn_value             # (0010,1000) -- MRN
+        ds.PatientID = patient_id_value        # (0010,0020)
+        ds.OtherPatientIDs = mrn_value         # (0010,1000)
 
     # Use the IIMS route: SCU=TEAM_SCP, SCP=LB-HTM-IM
     iims_scu = perf_config.integration.iims_scu_ae_title
