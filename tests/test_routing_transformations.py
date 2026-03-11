@@ -288,26 +288,27 @@ def test_patient_id_coerced_from_other_patient_ids(
     COMPASS_Transformation_PatientID_Coercion
 
     Send a study via the LB-HTM-IM route (non-ordered, same as IIMS test) with
-    an "AC"-prefixed value in PatientID (0010,0020) and the MRN in
-    OtherPatientIDs (0010,1000). The "AC" prefix triggers a Compass filter that
-    copies OtherPatientIDs into PatientID (Swap CSN for MRN).
+    an "AC"-prefixed value in PatientID (0010,0020) and the original MRN in
+    OtherPatientIDs (0010,1000).
 
-    For the study to be ROUTED to the destination (not just Inbound Logging
-    Only), use a real CSN/MRN pair from your system: set TEST_AC_CSN and
-    TEST_MRN in .env. Without them, the test uses placeholder values; the send
-    succeeds but Compass may not route the study, so C-FIND verification is
-    skipped.
+    Compass "Swap CSN for MRN" filter conditions (Match All):
+      - PatientID contains "AC"
+      - OtherPatientIDs exists
+    Action: Copy OtherPatientIDs -> PatientID
 
-    Route: SCU=TEAM_SCP -> SCP=LB-HTM-IM (same as IIMS tests)
+    AccessionNumber must be blank for the non-ordered route to forward the
+    study to the destination.
+
+    Route: SCU=TEAM_SCP -> SCP=LB-HTM-IM
 
     Test Steps:
-    1. Load a DICOM file
-    2. Set PatientID (0010,0020) = "AC" + CSN (triggers coercion)
-    3. Set OtherPatientIDs (0010,1000) = MRN value
-    4. Send via LB-HTM-IM route
-    5. If TEST_AC_CSN and TEST_MRN are set: C-FIND verify PatientID == MRN
+    1. Load a DICOM file, note original PatientID (MRN)
+    2. Set PatientID (0010,0020) = "AC" + original MRN (triggers filter)
+    3. Set OtherPatientIDs (0010,1000) = original MRN
+    4. Blank AccessionNumber (required for non-ordered routing)
+    5. Send via LB-HTM-IM route (SCU=TEAM_SCP, SCP=LB-HTM-IM)
+    6. C-FIND verification: PatientID should equal original MRN (coerced)
     """
-    import os
     from pydicom.uid import generate_uid
 
     ds = load_dataset(single_dicom_file)
@@ -317,41 +318,20 @@ def test_patient_id_coerced_from_other_patient_ids(
     ds.SeriesInstanceUID = generate_uid()
     ds.SOPInstanceUID = generate_uid()
 
-    # Optional: real CSN/MRN from .env so Compass routes the study to destination
-    env_csn = os.getenv("TEST_AC_CSN", "").strip()
-    env_mrn = os.getenv("TEST_MRN", "").strip()
-    use_real_ids = bool(env_csn and env_mrn)
-
-    # Optional: set TEST_USE_AC_PREFIX=0 or false to omit "AC" so the study routes
-    # (like IIMS test). When AC is present, Compass may not route without a real CSN.
-    use_ac_prefix = os.getenv("TEST_USE_AC_PREFIX", "1").strip().lower() not in ("0", "false", "no", "")
-
-    # Keep the original PatientID from the file for reference / fallback
+    # Keep the original PatientID (MRN) from the file
     original_patient_id = str(ds.PatientID) if hasattr(ds, 'PatientID') else None
 
-    if use_real_ids:
-        # CSN may be provided with or without "AC" prefix
-        csn_part = env_csn if not env_csn.upper().startswith("AC") else env_csn[2:].lstrip()
-        ac_csn_value = f"AC{csn_part}" if not env_csn.upper().startswith("AC") else env_csn
-        mrn_value = env_mrn
-    else:
-        timestamp = datetime.now().strftime('%H%M%S')
-        ac_csn_value = f"AC{timestamp}"
-        mrn_value = f"MRN{timestamp}"
-
-    # Blank AccessionNumber (like IIMS test) so the non-ordered route accepts the study
+    # Blank AccessionNumber so the non-ordered route accepts the study
     ds.AccessionNumber = ''
 
-    if not use_ac_prefix:
-        # No AC: keep everything from the original file (like IIMS test) so the
-        # study routes. Do NOT set OtherPatientIDs -- that may trigger Compass
-        # filters that prevent routing.
-        patient_id_value = original_patient_id
-        mrn_value = original_patient_id
-    else:
-        patient_id_value = ac_csn_value
-        ds.PatientID = patient_id_value        # (0010,0020)
-        ds.OtherPatientIDs = mrn_value         # (0010,1000)
+    # Swap: put AC + original MRN into PatientID, put original MRN into OtherPatientIDs.
+    # The "Swap CSN for MRN" filter in Compass will copy OtherPatientIDs -> PatientID.
+    ac_patient_id = f"AC{original_patient_id}"
+    mrn_value = original_patient_id
+
+    ds.PatientID = ac_patient_id             # (0010,0020) -- AC-prefixed, triggers filter
+    ds.OtherPatientIDs = mrn_value           # (0010,1000) -- real MRN, copied into PatientID
+    patient_id_value = ac_patient_id
 
     # Use the IIMS route: SCU=TEAM_SCP, SCP=LB-HTM-IM
     iims_scu = perf_config.integration.iims_scu_ae_title
@@ -363,18 +343,12 @@ def test_patient_id_coerced_from_other_patient_ids(
     print(f"PATIENT ID COERCION TEST (OtherPatientIDs -> PatientID)")
     print(f"{'='*70}")
     print(f"  StudyInstanceUID      : {study_uid}")
-    print(f"  PatientID  (0010,0020): {patient_id_value}  {'(AC-prefixed -- triggers coercion)' if use_ac_prefix else '(no AC -- study should route)'}")
-    print(f"  OtherPatientIDs (0010,1000): {mrn_value}  (MRN)")
-    if use_ac_prefix:
-        print(f"  Expected PatientID after Compass: {mrn_value}  (coerced from 0010,1000)")
-    else:
-        print(f"  Expected PatientID after Compass: {mrn_value}  (unchanged; Swap filter not triggered)")
+    print(f"  Original PatientID    : {original_patient_id}  (MRN from file)")
+    print(f"  PatientID  (0010,0020): {patient_id_value}  (AC-prefixed -- triggers Swap filter)")
+    print(f"  OtherPatientIDs (0010,1000): {mrn_value}  (MRN -- will be copied into PatientID)")
+    print(f"  AccessionNumber       : '' (blank -- required for non-ordered route)")
+    print(f"  Expected PatientID after Compass: {mrn_value}  (coerced from 0010,1000)")
     print(f"  Route: SCU={iims_scu} -> SCP={iims_scp}")
-    if not use_real_ids and use_ac_prefix:
-        print(f"  Note: TEST_AC_CSN/TEST_MRN not set; study may be Inbound Logging Only.")
-        print(f"        Set both in .env to a real CSN/MRN pair to verify routing.")
-    if not use_ac_prefix:
-        print(f"  Note: TEST_USE_AC_PREFIX=0; AC omitted so study should route to MIDIA.")
 
     # Override AE titles for the LB-HTM-IM route
     dicom_sender.endpoint.local_ae_title = iims_scu
@@ -402,14 +376,6 @@ def test_patient_id_coerced_from_other_patient_ids(
         # C-FIND verification when we expect the study to have been routed
         print(f"\n[STEP 2: C-FIND VERIFICATION]")
 
-        # Skip only when we used AC prefix and no real CSN/MRN (study likely not routed)
-        if use_ac_prefix and not use_real_ids:
-            pytest.skip(
-                "TEST_AC_CSN and TEST_MRN not set in .env. With AC prefix and placeholder "
-                "values Compass may not route the study (Inbound Logging Only). Set both to "
-                "a real CSN/MRN pair, or set TEST_USE_AC_PREFIX=0 to test routing without AC."
-            )
-
         if cfind_client is None:
             pytest.skip(
                 "C-FIND verification is required for this test (set CFIND_VERIFY=true)"
@@ -421,30 +387,24 @@ def test_patient_id_coerced_from_other_patient_ids(
 
         actual_patient_id = cfind_study.get('PatientID', '') if cfind_study else ''
 
-        print(f"\n  [CHECK]")
-        print(f"    Sent PatientID (0010,0020)        : {patient_id_value}")
+        print(f"\n  [COERCION CHECK]")
+        print(f"    Sent PatientID (0010,0020)        : {patient_id_value} (AC-prefixed)")
         print(f"    Sent OtherPatientIDs (0010,1000)  : {mrn_value} (MRN)")
         print(f"    Received PatientID via C-FIND     : {actual_patient_id}")
 
-        if use_ac_prefix:
-            with manual_verification_required(
-                f"PatientID coercion -- verify on Compass that PatientID "
-                f"for study {study_uid} equals '{mrn_value}' (coerced from "
-                f"OtherPatientIDs). Sent PatientID was '{patient_id_value}'."
-            ):
-                assert actual_patient_id == mrn_value, (
-                    f"PatientID coercion failed: expected '{mrn_value}' "
-                    f"(from OtherPatientIDs) but C-FIND returned '{actual_patient_id}'. "
-                    f"Original PatientID sent was '{patient_id_value}'. "
-                    f"Route: SCU={iims_scu}, SCP={iims_scp}."
-                )
-            print(f"    Result: PatientID correctly coerced from OtherPatientIDs")
-        else:
+        with manual_verification_required(
+            f"PatientID coercion -- verify on Compass that PatientID "
+            f"for study {study_uid} equals '{mrn_value}' (coerced from "
+            f"OtherPatientIDs). Sent PatientID was '{patient_id_value}'."
+        ):
             assert actual_patient_id == mrn_value, (
-                f"Expected PatientID '{mrn_value}' (no coercion), got '{actual_patient_id}'"
+                f"PatientID coercion failed: expected '{mrn_value}' "
+                f"(from OtherPatientIDs) but C-FIND returned '{actual_patient_id}'. "
+                f"Original PatientID sent was '{patient_id_value}'. "
+                f"Route: SCU={iims_scu}, SCP={iims_scp}."
             )
-            print(f"    Result: Study routed; PatientID unchanged (no AC prefix).")
 
+        print(f"    Result: PatientID correctly coerced from OtherPatientIDs")
         print(f"\n[DONE] PatientID coercion test complete")
 
     finally:
