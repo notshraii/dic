@@ -383,6 +383,13 @@ def test_patient_id_coerced_from_other_patient_ids(
     try:
         # Send to Compass
         print(f"\n[STEP 1: SENDING TO COMPASS via {iims_scp}]")
+        print(f"  [DEBUG] Tags being sent:")
+        print(f"    PatientID (0010,0020)       : '{ds.PatientID}'")
+        print(f"    AccessionNumber (0008,0050)  : '{ds.AccessionNumber}'")
+        print(f"    OtherPatientIDs (0010,1000)  : '{ds.OtherPatientIDs if hasattr(ds, 'OtherPatientIDs') else '<NOT PRESENT>'}'")
+        print(f"    StudyInstanceUID             : '{ds.StudyInstanceUID}'")
+        print(f"    Calling AE: {dicom_sender.endpoint.local_ae_title}")
+        print(f"    Called AE : {dicom_sender.endpoint.remote_ae_title}")
         dicom_sender._send_single_dataset(ds, metrics)
 
         assert metrics.successes == 1, (
