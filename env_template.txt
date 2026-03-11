@@ -101,6 +101,18 @@ IIMS_SCU_AE_TITLE=TEAM_SCP
 IIMS_SCP_AE_TITLE=LB-HTM-IM
 IIMS_CFIND_AE_TITLE=CLINICAL_SCP
 
+# PatientID coercion test (test_patient_id_coerced_from_other_patient_ids)
+# Optional. When both set, the test uses this CSN/MRN pair so Compass routes
+# the study to the destination; C-FIND then verifies the Swap CSN for MRN filter.
+# Without these, the test uses placeholder values; send succeeds but the study
+# may be Inbound Logging Only (no routing). CSN = encounter/visit number;
+# MRN = patient ID from an existing study. PatientID sent = "AC" + CSN.
+# TEST_AC_CSN=123456
+# TEST_MRN=98765432
+#
+# To have the study route without a real CSN (like IIMS test), omit the AC
+# prefix so Compass does not do CSN lookup. The Swap filter will not run.
+# TEST_USE_AC_PREFIX=0
 
 # ============================================================================
 # Azure DevOps (ADO) - Test Case Upload
