@@ -339,6 +339,9 @@ def test_patient_id_coerced_from_other_patient_ids(
         ac_csn_value = f"AC{timestamp}"
         mrn_value = f"MRN{timestamp}"
 
+    # Blank AccessionNumber (like IIMS test) so the non-ordered route accepts the study
+    ds.AccessionNumber = ''
+
     if not use_ac_prefix:
         # No AC: keep original PatientID from the file (like IIMS test) so the
         # study routes. Only set OtherPatientIDs to confirm the tag is present.
