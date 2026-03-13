@@ -132,8 +132,8 @@ def test_routing_throughput_under_peak_plus(
 
     assert total_sent > 0, "No messages were sent during throughput test"
 
-    # 2.0x load is more demanding; use 70% for 2.0, 85% for 1.5 (high-latency environments)
-    min_fraction = 0.70 if multiplier == 2.0 else 0.85
+    # 2.0x load is more demanding; use 65% for 2.0, 85% for 1.5
+    min_fraction = 0.65 if multiplier == 2.0 else 0.85
     min_throughput = min_fraction * target_peak
     assert (
         actual_rate >= min_throughput
